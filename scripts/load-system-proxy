@@ -1,0 +1,15 @@
+#!/bin/zsh
+# 读取系统当前 Wi-Fi 服务的 HTTP 代理
+PROXY_HOST=$(networksetup -getwebproxy "Wi-Fi" | awk '/Server:/{print $2}')
+PROXY_PORT=$(networksetup -getwebproxy "Wi-Fi" | awk '/Port:/{print $2}')
+SOCKS_HOST=$(networksetup -getsocksfirewallproxy "Wi-Fi" | awk '/Server:/{print $2}')
+SOCKS_PORT=$(networksetup -getsocksfirewallproxy "Wi-Fi" | awk '/Port:/{print $2}')
+
+[[ -n "$PROXY_HOST" && -n "$PROXY_PORT" ]] && {
+    export http_proxy="http://${PROXY_HOST}:${PROXY_PORT}"
+    export https_proxy="$http_proxy"
+}
+
+[[ -n "$SOCKS_HOST" && -n "$SOCKS_PORT" ]] && {
+    export all_proxy="socks5://${SOCKS_HOST}:${SOCKS_PORT}"
+}

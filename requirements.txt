@@ -1,0 +1,31 @@
+# Agentic KG - Knowledge Graph Construction with Google ADK
+# Core dependencies
+
+# Google ADK (Agent Development Kit)
+google-adk==1.5.0
+
+# Neo4j
+neo4j==5.28.1
+
+# LiteLLM for LLM abstraction
+litellm==1.73.6
+
+# Environment and configuration
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+
+# Neo4j GraphRAG (for unstructured data processing)
+neo4j-graphrag>=0.3.0
+
+# Text processing and similarity
+rapidfuzz>=3.0.0
+
+# HTTP requests
+requests>=2.31.0
+
+# Optional: LangChain integration
+langchain>=0.2.0
+langchain-openai>=0.1.0
+
+# DashScope SDK (Alibaba Cloud)
+dashscope>=1.0.0
