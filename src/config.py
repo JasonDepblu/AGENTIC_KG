@@ -40,7 +40,10 @@ class LLMConfig:
         "DASHSCOPE_BASE_URL",
         "https://dashscope.aliyuncs.com/compatible-mode/v1"
     ))
-    default_model: str = "Moonshot-Kimi-K2-Instruct"
+    default_model: str = field(default_factory=lambda: os.getenv(
+        "LLM_MODEL",
+        "qwen-plus-latest"  # Default to qwen-plus for stability
+    ))
 
     # Available models
     MODELS = {

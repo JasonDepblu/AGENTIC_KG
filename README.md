@@ -1,6 +1,6 @@
 # Agentic KG
 
-A multi-agent system for building knowledge graphs from structured and unstructured data using Google ADK (Agent Development Kit).
+A multi-agent system for building knowledge graphs from structured and unstructured data using Google ADK (Agent Development Kit). Features a ChatGPT-like web interface for interactive knowledge graph construction and visualization.
 
 ## Overview
 
@@ -8,9 +8,10 @@ Agentic KG orchestrates multiple AI agents to guide users through the complete k
 
 1. **User Intent Agent** - Captures and clarifies user goals for the knowledge graph
 2. **File Suggestion Agent** - Identifies and recommends relevant data files
-3. **Schema Proposal Agent** - Proposes graph schema with node and relationship definitions
-4. **Schema Critic Agent** - Reviews and validates proposed schemas
-5. **KG Builder Agent** - Executes the construction plan in Neo4j
+3. **Data Preprocessing Agent** - Validates and preprocesses data files before schema design
+4. **Schema Proposal Agent** - Proposes graph schema with node and relationship definitions
+5. **Schema Critic Agent** - Reviews and validates proposed schemas
+6. **KG Builder Agent** - Executes the construction plan in Neo4j
 
 ## Architecture
 
@@ -29,10 +30,33 @@ Agentic_KG/
 │   │   ├── base.py             # AgentCaller base class
 │   │   ├── user_intent_agent.py
 │   │   ├── file_suggestion_agent.py
+│   │   ├── data_preprocessing_agent.py
 │   │   ├── schema_proposal_agent.py
 │   │   └── kg_builder_agent.py
 │   └── pipelines/              # Workflow orchestration
 │       └── kg_pipeline.py      # Complete KG construction pipeline
+├── api/                         # FastAPI backend
+│   ├── main.py                 # FastAPI app entry point
+│   ├── routes/                 # API endpoints
+│   │   ├── files.py            # File management
+│   │   ├── chat.py             # WebSocket chat
+│   │   ├── sessions.py         # Session management
+│   │   └── graph.py            # Graph visualization API
+│   ├── services/               # Business logic
+│   │   ├── pipeline.py         # Pipeline wrapper
+│   │   └── file_manager.py     # File operations
+│   └── models/                 # Pydantic models
+│       └── schemas.py
+├── frontend/                    # React frontend
+│   ├── src/
+│   │   ├── components/         # React components
+│   │   │   ├── Chat/           # Chat interface
+│   │   │   ├── Sidebar/        # File browser
+│   │   │   └── Graph/          # Graph visualization
+│   │   ├── hooks/              # Custom React hooks
+│   │   ├── stores/             # Zustand state stores
+│   │   └── api/                # API client
+│   └── package.json
 ├── data/                       # Sample data files
 ├── main.py                     # CLI entry point
 ├── docker-compose.yml          # Neo4j Docker configuration
@@ -44,6 +68,7 @@ Agentic_KG/
 ### 1. Prerequisites
 
 - Python 3.10+
+- Node.js 18+ (for web interface)
 - Docker (for Neo4j)
 - DashScope API key (or other OpenAI-compatible LLM)
 
@@ -82,6 +107,23 @@ docker compose up -d
 
 ### 5. Run the Application
 
+**Option A: Web Interface (Recommended)**
+
+```bash
+# Terminal 1: Start the backend API
+source venv_adk/bin/activate
+uvicorn api.main:app --reload --port 8000
+
+# Terminal 2: Start the frontend
+cd frontend
+npm install  # First time only
+npm run dev
+```
+
+Open http://localhost:5173 in your browser.
+
+**Option B: Command Line**
+
 ```bash
 # Test connections
 python main.py --test-connection
@@ -92,6 +134,42 @@ python main.py --demo
 # Interactive mode
 python main.py --interactive
 ```
+
+## Web Interface
+
+The web interface provides a ChatGPT-like experience for building knowledge graphs.
+
+### Features
+
+- **Chat Interface**: Interactive conversation with AI agents for KG construction
+- **File Browser**: Browse and select data files from the import directory
+- **Phase Indicator**: Visual feedback showing the current pipeline phase
+- **Graph Visualization**: Interactive force-directed graph view with filtering
+
+### Graph Visualization
+
+The graph visualization feature allows you to explore your constructed knowledge graph:
+
+- **Schema-based Filtering**: Filter nodes by type (e.g., BrandPowertrain, Brand, Powertrain)
+- **Node Selection**: Select specific nodes to view their connections
+- **全部 (All) View**: Display a sampled overview of the entire graph
+- **Interactive Graph**: Drag nodes, zoom, and click for details
+- **Color Coding**: Different node types displayed in distinct colors
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/health` | GET | Health check |
+| `/api/files` | GET | List files in import directory |
+| `/api/files/upload` | POST | Upload file |
+| `/api/sessions` | GET/POST | Manage chat sessions |
+| `/api/chat/{session_id}` | WebSocket | Real-time chat |
+| `/api/graph/schema` | GET | Get graph schema (labels, types) |
+| `/api/graph/stats` | GET | Get node/relationship counts |
+| `/api/graph/sample` | GET | Get sample graph data |
+| `/api/graph/filter-options/{label}` | GET | Get filter options for a label |
+| `/api/graph/by-center-node/{node_id}` | GET | Get graph centered on a node |
 
 ## Usage
 

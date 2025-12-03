@@ -15,6 +15,7 @@ services:
       - neo4j_data:/data
       - neo4j_logs:/logs
       - neo4j_plugins:/plugins
+      - ./data:/var/lib/neo4j/import  # Mount data dir for LOAD CSV
 
 volumes:
   neo4j_data:

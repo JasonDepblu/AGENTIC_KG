@@ -11,6 +11,10 @@ from dotenv import load_dotenv
 
 from .config import get_config
 
+# Apply patches for third-party library compatibility
+from .patches import apply_patches
+apply_patches()
+
 load_dotenv()
 
 

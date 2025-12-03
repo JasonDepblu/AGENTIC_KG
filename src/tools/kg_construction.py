@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 from google.adk.tools import ToolContext
 
 from .common import tool_success, tool_error
-from .file_suggestion import search_file
+from .file_suggestion import search_file, SEARCH_RESULTS
 
 # State keys
 PROPOSED_CONSTRUCTION_PLAN = "proposed_construction_plan"
@@ -77,19 +77,20 @@ def load_nodes_from_csv(
         from ..neo4j_client import get_graphdb
         graphdb = get_graphdb()
 
-    query = f"""LOAD CSV WITH HEADERS FROM "file:///" + $source_file AS row
+    # Build SET clause for properties
+    set_clauses = ", ".join([f"n.`{prop}` = row.`{prop}`" for prop in properties if prop != unique_column_name])
+    set_statement = f"SET {set_clauses}" if set_clauses else ""
+
+    # Neo4j doesn't support parameterized labels, so we use f-string
+    # Backticks escape special characters in identifiers
+    query = f"""LOAD CSV WITH HEADERS FROM 'file:///{source_file}' AS row
     CALL (row) {{
-        MERGE (n:$($label) {{ {unique_column_name} : row[$unique_column_name] }})
-        FOREACH (k IN $properties | SET n[k] = row[k])
+        MERGE (n:`{label}` {{ `{unique_column_name}`: row.`{unique_column_name}` }})
+        {set_statement}
     }} IN TRANSACTIONS OF 1000 ROWS
     """
 
-    return graphdb.send_query(query, {
-        "source_file": source_file,
-        "label": label,
-        "unique_column_name": unique_column_name,
-        "properties": properties
-    })
+    return graphdb.send_query(query)
 
 
 def load_relationships_from_csv(
@@ -124,24 +125,22 @@ def load_relationships_from_csv(
         from ..neo4j_client import get_graphdb
         graphdb = get_graphdb()
 
-    query = f"""LOAD CSV WITH HEADERS FROM "file:///" + $source_file AS row
+    # Build SET clause for relationship properties
+    set_clauses = ", ".join([f"r.`{prop}` = row.`{prop}`" for prop in properties])
+    set_statement = f"SET {set_clauses}" if set_clauses else ""
+
+    # Neo4j doesn't support parameterized labels/types, so we use f-string
+    # Backticks escape special characters in identifiers
+    query = f"""LOAD CSV WITH HEADERS FROM 'file:///{source_file}' AS row
     CALL (row) {{
-        MATCH (from_node:$($from_node_label) {{ {from_node_column} : row[$from_node_column] }}),
-              (to_node:$($to_node_label) {{ {to_node_column} : row[$to_node_column] }} )
-        MERGE (from_node)-[r:$($relationship_type)]->(to_node)
-        FOREACH (k IN $properties | SET r[k] = row[k])
+        MATCH (from_node:`{from_node_label}` {{ `{from_node_column}`: row.`{from_node_column}` }})
+        MATCH (to_node:`{to_node_label}` {{ `{to_node_column}`: row.`{to_node_column}` }})
+        MERGE (from_node)-[r:`{relationship_type}`]->(to_node)
+        {set_statement}
     }} IN TRANSACTIONS OF 1000 ROWS
     """
 
-    return graphdb.send_query(query, {
-        "source_file": source_file,
-        "from_node_label": from_node_label,
-        "from_node_column": from_node_column,
-        "to_node_label": to_node_label,
-        "to_node_column": to_node_column,
-        "relationship_type": relationship_type,
-        "properties": properties
-    })
+    return graphdb.send_query(query)
 
 
 def import_nodes(node_construction: Dict, graphdb=None) -> Dict[str, Any]:

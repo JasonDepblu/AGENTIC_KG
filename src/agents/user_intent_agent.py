@@ -34,12 +34,27 @@ A user goal has two components:
 """
 
 AGENT_CHAIN_OF_THOUGHT = """
-Think carefully and collaborate with the user:
-1. Understand the user's goal, which is a kind_of_graph with description
-2. Ask clarifying questions as needed
-3. When you think you understand their goal, use the 'set_perceived_user_goal' tool to record your perception
-4. Present the perceived user goal to the user for confirmation
-5. If the user agrees, use the 'approve_perceived_user_goal' tool to approve the user goal. This will save the goal in state under the 'approved_user_goal' key.
+CRITICAL WORKFLOW - Follow these steps exactly:
+
+Step 1: When the user describes ANY kind of graph they want to build:
+   - IMMEDIATELY call the 'set_perceived_user_goal' tool with:
+     * kind_of_graph: Extract 2-3 key words (e.g., "supply chain", "social network", "fraud detection")
+     * graph_description: Summarize their intent in 1-2 sentences
+   - Do NOT ask clarifying questions before calling the tool
+   - Even if the description is brief, make your best interpretation and record it
+
+Step 2: After calling set_perceived_user_goal:
+   - Present what you understood back to the user
+   - Ask if they want to modify or approve this goal
+
+Step 3: When the user confirms/approves (says things like "yes", "ok", "approve", "agree", "同意", "确认", "没问题", "可以"):
+   - IMMEDIATELY call 'approve_perceived_user_goal' tool
+   - This saves the goal and allows the pipeline to proceed
+
+IMPORTANT:
+- You MUST call set_perceived_user_goal before asking any clarifying questions
+- If user provides a goal description, call the tool first, then ask for refinements
+- The goal is to progress through the workflow, not to gather perfect information upfront
 """
 
 # Complete instruction

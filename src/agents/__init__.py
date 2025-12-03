@@ -7,6 +7,7 @@ Contains agent definitions for the multi-agent knowledge graph construction syst
 from .base import AgentCaller, make_agent_caller, run_agent_conversation
 from .user_intent_agent import create_user_intent_agent
 from .file_suggestion_agent import create_file_suggestion_agent
+from .data_preprocessing_agent import create_data_preprocessing_agent
 from .schema_proposal_agent import (
     create_schema_proposal_agent,
     create_schema_critic_agent,
@@ -24,6 +25,8 @@ __all__ = [
     "create_user_intent_agent",
     # File Suggestion
     "create_file_suggestion_agent",
+    # Data Preprocessing
+    "create_data_preprocessing_agent",
     # Schema Proposal
     "create_schema_proposal_agent",
     "create_schema_critic_agent",
