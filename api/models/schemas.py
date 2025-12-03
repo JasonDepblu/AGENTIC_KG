@@ -53,6 +53,7 @@ class PipelinePhase(str, Enum):
     DATA_PREPROCESSING = "data_preprocessing"
     SCHEMA_PROPOSAL = "schema_proposal"
     CONSTRUCTION = "construction"
+    QUERY = "query"  # GraphRAG query phase - after KG construction
     COMPLETE = "complete"
     ERROR = "error"
 

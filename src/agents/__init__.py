@@ -15,6 +15,10 @@ from .schema_proposal_agent import (
     CheckStatusAndEscalate,
 )
 from .kg_builder_agent import create_kg_builder_agent
+from .ner_agent import create_ner_agent
+from .fact_type_agent import create_fact_type_agent
+from .unstructured_data_agent import create_unstructured_data_agent
+from .kg_query_agent import create_kg_query_agent
 
 __all__ = [
     # Base
@@ -34,4 +38,10 @@ __all__ = [
     "CheckStatusAndEscalate",
     # KG Builder
     "create_kg_builder_agent",
+    # Unstructured Data Agents
+    "create_ner_agent",
+    "create_fact_type_agent",
+    "create_unstructured_data_agent",
+    # KG Query Agent
+    "create_kg_query_agent",
 ]

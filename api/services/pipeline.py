@@ -18,6 +18,7 @@ from src.agents.file_suggestion_agent import create_file_suggestion_agent
 from src.agents.data_preprocessing_agent import create_data_preprocessing_agent
 from src.agents.schema_proposal_agent import create_schema_refinement_loop
 from src.agents.kg_builder_agent import build_domain_graph
+from src.agents.kg_query_agent import create_kg_query_agent
 from src.tools.kg_construction import APPROVED_CONSTRUCTION_PLAN
 
 from ..models.schemas import (
@@ -109,6 +110,9 @@ class PipelineSession:
                     yield msg
             elif phase == PipelinePhase.CONSTRUCTION:
                 async for msg in self._run_construction():
+                    yield msg
+            elif phase == PipelinePhase.QUERY:
+                async for msg in self._run_query(user_message):
                     yield msg
 
         except Exception as e:
@@ -322,11 +326,12 @@ class PipelineSession:
             result = build_domain_graph(construction_plan)
 
             self.state["construction_result"] = result
-            self.phase = PipelinePhase.COMPLETE
+            self.state["construction_complete"] = True  # Mark construction as done
+            self.phase = PipelinePhase.QUERY  # Transition to query phase
 
             yield WebSocketMessage(
                 type=WebSocketMessageType.AGENT_RESPONSE,
-                content=f"Knowledge graph construction complete!\n\n{result}",
+                content=f"Knowledge graph construction complete!\n\n{result}\n\nYou can now ask questions about the knowledge graph.",
                 author="KG Builder",
                 is_final=True,
             )
@@ -342,6 +347,27 @@ class PipelineSession:
                 type=WebSocketMessageType.ERROR,
                 error=f"Construction failed: {str(e)}",
             )
+
+    async def _run_query(self, user_message: str) -> AsyncGenerator[WebSocketMessage, None]:
+        """Run knowledge graph query phase."""
+        if not self.state.get("construction_complete"):
+            yield WebSocketMessage(
+                type=WebSocketMessageType.ERROR,
+                error="Knowledge graph must be constructed first before querying",
+            )
+            return
+
+        # Reuse the same query agent instance across messages
+        agent = self._get_or_create_agent("kg_query", create_kg_query_agent)
+
+        # Run agent with user's query
+        async for msg in self._run_agent_with_streaming(
+            agent, user_message, "KG Query Agent"
+        ):
+            yield msg
+
+        # Query phase stays active - user can keep asking questions
+        # No PHASE_COMPLETE is sent as this is an ongoing interaction phase
 
 
 class SessionManager:
@@ -426,7 +452,11 @@ class PipelineService:
     def _determine_next_phase(self, session: PipelineSession) -> PipelinePhase:
         """Determine the next phase based on current state."""
         # Check state to determine which phase to run
-        if "approved_construction_plan" in session.state:
+        # Order matters! Check from later phases to earlier phases
+        if session.state.get("construction_complete"):
+            # KG is built, go to query phase
+            return PipelinePhase.QUERY
+        elif "approved_construction_plan" in session.state:
             return PipelinePhase.CONSTRUCTION
         elif session.state.get("preprocessing_complete"):
             return PipelinePhase.SCHEMA_PROPOSAL

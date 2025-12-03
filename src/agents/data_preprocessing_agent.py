@@ -2,6 +2,7 @@
 Data Preprocessing Agent for Agentic KG.
 
 Agent responsible for analyzing data formats and transforming files as needed.
+Supports multiple data formats including wide tables, survey data, and more.
 """
 
 from google.adk.agents import Agent
@@ -9,10 +10,25 @@ from google.adk.agents import Agent
 from ..llm import get_adk_llm
 from ..tools.file_suggestion import get_approved_files, sample_file
 from ..tools.data_preprocessing import (
+    # Basic analysis
     analyze_data_format,
+    # Wide format transformation
     transform_wide_to_long,
+    # State management
     get_transformed_files,
     approve_preprocessing,
+    # Survey format analysis (new)
+    analyze_survey_format,
+    classify_columns,
+    # Data normalization (new)
+    normalize_values,
+    split_multi_value_column,
+    # Entity and data extraction (new)
+    extract_entities,
+    extract_ratings,
+    extract_opinion_pairs,
+    # High-level orchestration (new)
+    parse_survey_responses,
 )
 
 # Agent instruction
@@ -20,14 +36,24 @@ AGENT_ROLE_AND_GOAL = """
 You are a data preprocessing expert. Your job is to analyze approved data files
 and transform them into formats suitable for knowledge graph construction.
 
-Many data files come in "wide format" (pivot table style) where:
-- Rows represent one entity type (e.g., attributes, metrics)
-- Column headers represent another entity type (e.g., brands, products)
-- Cell values represent relationships or scores between them
+You can handle multiple data formats:
 
-These need to be transformed into "long format" for proper knowledge graph import:
-- Each entity type in its own file with unique identifiers
-- Relationships in a separate file linking entities
+1. **Wide Format** (Pivot Table Style):
+   - Rows represent one entity type (e.g., attributes, metrics)
+   - Column headers represent another entity type (e.g., brands, products)
+   - Cell values represent relationships/scores
+
+2. **Survey Format**:
+   - Rows represent individual responses/respondents
+   - Multiple column categories: demographics, ratings, opinions, entities
+   - May contain multi-value columns with delimiters like "┋"
+   - Special null values like "(跳过)", "(空)"
+   - Rating columns (打多少分)
+   - Opinion pairs (优秀点/劣势点)
+
+3. **Standard Row Format**:
+   - Each row is a complete record
+   - No transformation needed
 """
 
 AGENT_WORKFLOW = """
@@ -38,19 +64,30 @@ Step 1: Get the approved files
 
 Step 2: For each approved file, analyze its format
    - Use 'sample_file' to view the file content
-   - Use 'analyze_data_format' to detect if it's wide or row format
-   - Pay attention to:
-     * Whether column headers contain entity names (Chinese text = likely entities)
-     * Whether the first column contains categorical identifiers
-     * Whether most other columns contain numeric values
+   - Use 'analyze_data_format' to detect basic format (wide/row)
+   - If the file appears to be survey data (many columns, mixed types),
+     use 'analyze_survey_format' for detailed analysis
+   - Use 'classify_columns' to understand column semantics
 
-Step 3: If wide format is detected, transform the file
-   - Use 'transform_wide_to_long' with appropriate parameters:
-     * id_column: The column containing row identifiers (usually first column or first non-numeric column)
-     * value_column_name: Name for the numeric values (e.g., "attention_score", "rating")
-     * entity_column_name: Name for entities extracted from column headers (e.g., "brand_powertrain")
-     * output_prefix: A short prefix for output files based on the data domain
-     * skip_columns: Any columns that should not be transformed (e.g., average/summary columns)
+Step 3: Based on detected format, apply appropriate transformations
+
+   FOR WIDE FORMAT (column headers = entity names):
+   - Use 'transform_wide_to_long' with parameters:
+     * id_column: Column containing row identifiers
+     * value_column_name: Name for numeric values
+     * entity_column_name: Name for entities from column headers
+     * output_prefix: Short prefix for output files
+     * skip_columns: Columns to exclude (e.g., averages)
+
+   FOR SURVEY FORMAT:
+   - First normalize: Use 'normalize_values' to handle "(跳过)", "(空)"
+   - Extract entities: Use 'extract_entities' for brand, model, store columns
+   - Extract ratings: Use 'extract_ratings' for score columns
+   - Split multi-values: Use 'split_multi_value_column' for "┋" delimited columns
+   - Extract opinions: Use 'extract_opinion_pairs' for positive/negative feedback
+
+   OR for complete survey processing:
+   - Use 'parse_survey_responses' which orchestrates all the above
 
 Step 4: Present transformation results and ask for approval
    - Use 'get_transformed_files' to show what was created
@@ -61,10 +98,20 @@ Step 5: When user approves, finalize preprocessing
    - Use 'approve_preprocessing' to update the approved files list
    - This will replace original files with transformed ones
 
-IMPORTANT:
-- For Chinese data like "上汽集团 纯电动", these are brand-powertrain combinations that should be extracted as entities
-- The first column often contains attribute names that should become node identifiers
-- Columns like "关注度均值" (average attention) might be metadata to skip or include as properties
+IMPORTANT PATTERNS:
+
+For Survey Data:
+- Multi-value columns use "┋" as delimiter (not comma or semicolon)
+- Special values "(跳过)" and "(空)" should be treated as null/empty
+- Opinion pairs come in adjacent columns: "优秀点" then "劣势点"
+- Rating columns contain "打多少分" in their names
+- Entity columns contain patterns like "品牌", "车型", "门店"
+- Demographic columns contain "年龄", "性别", "家庭"
+
+For Wide Format:
+- Chinese text in column headers = likely entities (e.g., "上汽集团 纯电动")
+- First column often contains attribute names
+- Columns like "关注度均值" (averages) should be skipped
 """
 
 DATA_PREPROCESSING_INSTRUCTION = f"""
@@ -72,12 +119,25 @@ DATA_PREPROCESSING_INSTRUCTION = f"""
 {AGENT_WORKFLOW}
 """
 
-# Tools for the agent
+# Tools for the agent - including all new ETL tools
 DATA_PREPROCESSING_TOOLS = [
+    # File access
     get_approved_files,
     sample_file,
+    # Format analysis
     analyze_data_format,
+    analyze_survey_format,
+    classify_columns,
+    # Wide format transformation
     transform_wide_to_long,
+    # Survey format tools
+    normalize_values,
+    split_multi_value_column,
+    extract_entities,
+    extract_ratings,
+    extract_opinion_pairs,
+    parse_survey_responses,
+    # State management
     get_transformed_files,
     approve_preprocessing,
 ]
@@ -85,14 +145,19 @@ DATA_PREPROCESSING_TOOLS = [
 
 def create_data_preprocessing_agent(
     llm=None,
-    name: str = "data_preprocessing_agent_v1"
+    name: str = "data_preprocessing_agent_v2"
 ) -> Agent:
     """
     Create a Data Preprocessing Agent.
 
     The data preprocessing agent analyzes approved files, detects their format,
-    and transforms wide-format data into long format suitable for knowledge
-    graph construction.
+    and transforms data into formats suitable for knowledge graph construction.
+
+    Supports:
+    - Wide format (pivot tables) -> long format
+    - Survey data -> normalized entity/rating/opinion files
+    - Multi-value columns -> split into separate rows
+    - Special null value handling
 
     Args:
         llm: Optional LLM instance. If None, uses default from get_adk_llm()
@@ -107,10 +172,12 @@ def create_data_preprocessing_agent(
 
         agent = create_data_preprocessing_agent()
         caller = await make_agent_caller(agent, {
-            "approved_files": ["data_process.csv"]
+            "approved_files": ["survey_data.csv"]
         })
 
-        await caller.call("Analyze and preprocess the approved files")
+        # For survey data
+        await caller.call("Analyze the survey data format")
+        await caller.call("Parse the survey responses into normalized files")
         await caller.call("Approve the transformation")
         ```
     """
@@ -120,7 +187,7 @@ def create_data_preprocessing_agent(
     return Agent(
         name=name,
         model=llm,
-        description="Analyzes data files and transforms wide-format data for knowledge graph import.",
+        description="Analyzes data files and transforms various formats (wide tables, surveys, multi-value) for knowledge graph import.",
         instruction=DATA_PREPROCESSING_INSTRUCTION,
         tools=DATA_PREPROCESSING_TOOLS,
     )

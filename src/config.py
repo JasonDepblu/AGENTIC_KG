@@ -44,6 +44,10 @@ class LLMConfig:
         "LLM_MODEL",
         "qwen-plus-latest"  # Default to qwen-plus for stability
     ))
+    embedding_model: str = field(default_factory=lambda: os.getenv(
+        "EMBEDDING_MODEL",
+        "text-embedding-v3"  # DashScope embedding model
+    ))
 
     # Available models
     MODELS = {
