@@ -39,24 +39,22 @@ A multi-agent system for building knowledge graphs from structured and unstructu
 ┌──────────────────────────────┼──────────────────────────────────────────────┐
 │                        Agent Layer (Google ADK)                             │
 │                                                                             │
-│  Phase 1         Phase 2           Phase 3          Phase 4                 │
-│  ┌─────────┐    ┌─────────────┐   ┌───────────┐   ┌─────────────────────┐   │
-│  │ User    │───►│ File        │──►│ Data      │──►│ Schema-Preprocess   │   │
-│  │ Intent  │    │ Suggestion  │   │ Cleaning  │   │ Coordinator         │   │
-│  │ Agent   │    │ Agent       │   │ Agent     │   │ ┌─────────────────┐ │   │
-│  └─────────┘    └─────────────┘   └───────────┘   │ │ Schema Design   │ │   │
-│                                                   │ │ Loop + Critic   │ │   │
-│                                                   │ └────────┬────────┘ │   │
-│                                                   │          ↕ rollback │   │
-│                                                   │ ┌────────┴────────┐ │   │
-│                                                   │ │ Preprocessing   │ │   │
-│                                                   │ │ Loop + Critic   │ │   │
-│                                                   │ └─────────────────┘ │   │
-│                                                   └──────────┬──────────┘   │
-│                                                              │              │
-│  Phase 5                    Phase 6                          │              │
-│  ┌─────────────┐           ┌─────────────────────┐           │              │
-│  │ KG Builder  │◄──────────┤ KG Query Agent      │◄──────────┘              │
+│  Phase 1         Phase 2           Phase 3: Schema-Preprocess Coordinator  │
+│  ┌─────────┐    ┌─────────────┐   ┌─────────────────────────────────────┐   │
+│  │ User    │───►│ File        │──►│  ┌─────────────────┐                │   │
+│  │ Intent  │    │ Suggestion  │   │  │ Schema Design   │                │   │
+│  │ Agent   │    │ Agent       │   │  │ Loop + Critic   │                │   │
+│  └─────────┘    └─────────────┘   │  └────────┬────────┘                │   │
+│                                   │           ↕ rollback                │   │
+│                                   │  ┌────────┴────────┐                │   │
+│                                   │  │ Preprocessing   │                │   │
+│                                   │  │ Loop + Critic   │                │   │
+│                                   │  └─────────────────┘                │   │
+│                                   └──────────────┬──────────────────────┘   │
+│                                                  │                          │
+│  Phase 4                    Phase 5              │                          │
+│  ┌─────────────┐           ┌─────────────────────┐                          │
+│  │ KG Builder  │◄──────────┤ KG Query Agent      │◄─────────────────────────┘
 │  │ Agent       │           │ ┌─────────────────┐ │                          │
 │  └──────┬──────┘           │ │ Cypher Generator│ │                          │
 │         │                  │ │ Cypher Validator│ │                          │
@@ -78,16 +76,31 @@ A multi-agent system for building knowledge graphs from structured and unstructu
 
 ## Pipeline Phases & Data Flow
 
-### Complete Pipeline Flow
+### Pipeline Modes
+
+The system supports multiple pipeline modes:
+
+| Mode | Flow | Status |
+|------|------|--------|
+| **Schema-First (Default)** | Intent → Files → Schema → Extract → Build → Query | **Active** |
+| **Schema-First + Cleaning** | Intent → Files → Clean → Schema → Extract → Build → Query | Reserved |
+| **Legacy** | Intent → Files → Preprocess → Schema → Build → Query | Deprecated |
+
+> **Note**: The DATA_CLEANING phase is fully implemented (`data_cleaning_agent.py`, `data_cleaning.py`)
+> but currently **skipped** in the default Schema-First mode. The Schema Design Agent performs basic
+> data analysis internally using `sample_raw_file_structure()`. The cleaning phase can be enabled
+> for scenarios requiring extensive data quality improvement before schema design.
+
+### Default Pipeline Flow (Schema-First)
 
 ```
-USER_INTENT ──► FILE_SUGGESTION ──► DATA_CLEANING ──► SCHEMA_PREPROCESS_COORDINATOR ──► CONSTRUCTION ──► QUERY
-                                                               │
-                                                     ┌─────────┴─────────┐
-                                                     │                   │
-                                               SCHEMA_DESIGN ◄──────► TARGETED_PREPROCESSING
-                                                     │                   │
-                                                     └───── rollback ◄───┘
+USER_INTENT ──► FILE_SUGGESTION ──► SCHEMA_PREPROCESS_COORDINATOR ──► CONSTRUCTION ──► QUERY
+                                              │
+                                    ┌─────────┴─────────┐
+                                    │                   │
+                              SCHEMA_DESIGN ◄──────► TARGETED_PREPROCESSING
+                                    │                   │
+                                    └───── rollback ◄───┘
 ```
 
 ### Phase Details
@@ -96,11 +109,16 @@ USER_INTENT ──► FILE_SUGGESTION ──► DATA_CLEANING ──► SCHEMA_P
 |-------|-------|-------------|-----------|
 | **USER_INTENT** | `user_intent_agent` | Captures and clarifies user goals for the knowledge graph | `set_perceived_user_goal`, `approve_perceived_user_goal` |
 | **FILE_SUGGESTION** | `file_suggestion_agent` | Identifies and recommends relevant data files | `list_available_files`, `sample_file`, `approve_suggested_files` |
-| **DATA_CLEANING** | `data_cleaning_agent` | Removes meaningless columns/rows, validates data quality | `analyze_file_quality`, `detect_column_types`, `clean_file` |
 | **SCHEMA_DESIGN** | `schema_design_agent` + critic | Designs target schema with nodes, relationships, extraction hints | `propose_node_type`, `propose_relationship_type`, `approve_target_schema` |
 | **TARGETED_PREPROCESSING** | `targeted_preprocessing_agent` + critic | Extracts entities and relationships based on schema | `extract_entities_for_node`, `extract_relationship_data`, `save_extracted_data` |
 | **CONSTRUCTION** | `kg_builder_agent` | Executes the construction plan in Neo4j | `construct_domain_graph`, `load_nodes_from_csv` |
 | **QUERY** | `kg_query_agent` | Natural language querying of the knowledge graph (GraphRAG) | `propose_cypher_query`, `execute_and_validate_query` |
+
+#### Reserved Phase (Not Active by Default)
+
+| Phase | Agent | Description | Key Tools |
+|-------|-------|-------------|-----------|
+| **DATA_CLEANING** | `data_cleaning_agent` | Removes meaningless columns/rows, validates data quality | `analyze_file_quality`, `detect_column_types`, `clean_file` |
 
 ### Data Flow Diagram
 
@@ -109,13 +127,6 @@ USER_INTENT ──► FILE_SUGGESTION ──► DATA_CLEANING ──► SCHEMA_P
                           │   User Input    │
                           │ (Goal + Files)  │
                           └────────┬────────┘
-                                   │
-                    ┌──────────────▼──────────────┐
-                    │      DATA CLEANING          │
-                    │  • Remove empty columns     │
-                    │  • Detect column types      │
-                    │  • Clean invalid data       │
-                    └──────────────┬──────────────┘
                                    │
                     ┌──────────────▼──────────────┐
                     │      SCHEMA DESIGN          │
@@ -220,12 +231,12 @@ Agentic_KG/
 │   │   ├── base.py                   # AgentCaller wrapper class
 │   │   ├── user_intent_agent.py      # Phase 1: User goal capture
 │   │   ├── file_suggestion_agent.py  # Phase 2: File selection
-│   │   ├── data_cleaning_agent.py    # Phase 3: Data quality improvement
-│   │   ├── schema_design_agent.py    # Phase 4a: Schema design + critic + loop
-│   │   ├── targeted_preprocessing_agent.py  # Phase 4b: Data extraction + critic + loop
-│   │   ├── schema_preprocess_coordinator.py # Super coordinator with rollback
-│   │   ├── kg_builder_agent.py       # Phase 5: Neo4j construction
-│   │   ├── kg_query_agent.py         # Phase 6: Natural language queries
+│   │   ├── schema_design_agent.py    # Phase 3a: Schema design + critic + loop
+│   │   ├── targeted_preprocessing_agent.py  # Phase 3b: Data extraction + critic + loop
+│   │   ├── schema_preprocess_coordinator.py # Phase 3: Super coordinator with rollback
+│   │   ├── kg_builder_agent.py       # Phase 4: Neo4j construction
+│   │   ├── kg_query_agent.py         # Phase 5: Natural language queries
+│   │   ├── data_cleaning_agent.py    # Reserved: Data quality improvement
 │   │   ├── cypher_generator_agent.py # Cypher query generation
 │   │   ├── cypher_validator_agent.py # Cypher validation
 │   │   ├── cypher_loop_agent.py      # Query refinement loop
@@ -285,18 +296,23 @@ Agentic_KG/
 
 ## Agent Inventory
 
-### Core Pipeline Agents
+### Core Pipeline Agents (Default Flow)
 
 | Agent | Phase | Purpose |
 |-------|-------|---------|
 | `user_intent_agent` | 1 | Capture and clarify user goals |
 | `file_suggestion_agent` | 2 | File discovery and selection |
-| `data_cleaning_agent` | 3 | Data quality improvement |
-| `schema_design_agent` | 4a | Design target schema |
-| `targeted_preprocessing_agent` | 4b | Extract entities/relationships |
-| `schema_preprocess_coordinator` | 4 | Orchestrate schema + preprocessing with rollback |
-| `kg_builder_agent` | 5 | Execute Neo4j import |
-| `kg_query_agent` | 6 | Natural language queries |
+| `schema_design_agent` | 3a | Design target schema |
+| `targeted_preprocessing_agent` | 3b | Extract entities/relationships |
+| `schema_preprocess_coordinator` | 3 | Orchestrate schema + preprocessing with rollback |
+| `kg_builder_agent` | 4 | Execute Neo4j import |
+| `kg_query_agent` | 5 | Natural language queries |
+
+### Reserved Agents (Not Active by Default)
+
+| Agent | Purpose | Status |
+|-------|---------|--------|
+| `data_cleaning_agent` | Data quality improvement before schema design | Reserved for future use |
 
 ### Query Refinement Agents
 
