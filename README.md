@@ -25,48 +25,48 @@ A multi-agent system for building knowledge graphs from structured and unstructu
 │  │ Chat UI      │  │ Phase        │  │ File Browser │  │ Graph            │ │
 │  │ (Messages)   │  │ Indicator    │  │ (Sidebar)    │  │ Visualization    │ │
 │  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────────┘ │
-│                              │ WebSocket (Real-time streaming)               │
+│                              │ WebSocket (Real-time streaming)              │
 └──────────────────────────────┼──────────────────────────────────────────────┘
                                │
 ┌──────────────────────────────┼──────────────────────────────────────────────┐
-│                      FastAPI Backend (Port 8000)                             │
+│                      FastAPI Backend (Port 8000)                            │
 │  ┌────────────────────────────────────────────────────────────────────────┐ │
-│  │                    Pipeline Service (Orchestrator)                      │ │
+│  │                    Pipeline Service (Orchestrator)                     │ │
 │  │  Session Management │ Phase Control │ Event Streaming │ State Storage  │ │
 │  └────────────────────────────────────────────────────────────────────────┘ │
 └──────────────────────────────┼──────────────────────────────────────────────┘
                                │
 ┌──────────────────────────────┼──────────────────────────────────────────────┐
-│                        Agent Layer (Google ADK)                              │
-│                                                                              │
+│                        Agent Layer (Google ADK)                             │
+│                                                                             │
 │  Phase 1         Phase 2           Phase 3          Phase 4                 │
 │  ┌─────────┐    ┌─────────────┐   ┌───────────┐   ┌─────────────────────┐   │
 │  │ User    │───►│ File        │──►│ Data      │──►│ Schema-Preprocess   │   │
 │  │ Intent  │    │ Suggestion  │   │ Cleaning  │   │ Coordinator         │   │
 │  │ Agent   │    │ Agent       │   │ Agent     │   │ ┌─────────────────┐ │   │
 │  └─────────┘    └─────────────┘   └───────────┘   │ │ Schema Design   │ │   │
-│                                                    │ │ Loop + Critic   │ │   │
-│                                                    │ └────────┬────────┘ │   │
-│                                                    │          ↕ rollback │   │
-│                                                    │ ┌────────┴────────┐ │   │
-│                                                    │ │ Preprocessing   │ │   │
-│                                                    │ │ Loop + Critic   │ │   │
-│                                                    │ └─────────────────┘ │   │
-│                                                    └──────────┬──────────┘   │
-│                                                               │              │
-│  Phase 5                    Phase 6                           │              │
-│  ┌─────────────┐           ┌─────────────────────┐            │              │
-│  │ KG Builder  │◄──────────┤ KG Query Agent      │◄───────────┘              │
-│  │ Agent       │           │ ┌─────────────────┐ │                           │
-│  └──────┬──────┘           │ │ Cypher Generator│ │                           │
-│         │                  │ │ Cypher Validator│ │                           │
-│         │                  │ │ Cypher Loop     │ │                           │
-│         │                  │ └─────────────────┘ │                           │
-│         │                  └─────────────────────┘                           │
-└─────────┼────────────────────────────────────────────────────────────────────┘
+│                                                   │ │ Loop + Critic   │ │   │
+│                                                   │ └────────┬────────┘ │   │
+│                                                   │          ↕ rollback │   │
+│                                                   │ ┌────────┴────────┐ │   │
+│                                                   │ │ Preprocessing   │ │   │
+│                                                   │ │ Loop + Critic   │ │   │
+│                                                   │ └─────────────────┘ │   │
+│                                                   └──────────┬──────────┘   │
+│                                                              │              │
+│  Phase 5                    Phase 6                          │              │
+│  ┌─────────────┐           ┌─────────────────────┐           │              │
+│  │ KG Builder  │◄──────────┤ KG Query Agent      │◄──────────┘              │
+│  │ Agent       │           │ ┌─────────────────┐ │                          │
+│  └──────┬──────┘           │ │ Cypher Generator│ │                          │
+│         │                  │ │ Cypher Validator│ │                          │
+│         │                  │ │ Cypher Loop     │ │                          │
+│         │                  │ └─────────────────┘ │                          │
+│         │                  └─────────────────────┘                          │
+└─────────┼───────────────────────────────────────────────────────────────────┘
           │
 ┌─────────┼────────────────────────────────────────────────────────────────────┐
-│         ▼                  External Services                                  │
+│         ▼                  External Services                                 │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                    │
 │  │   Neo4j      │    │  DashScope   │    │ Silicon Cloud│                    │
 │  │   Database   │    │  LLM (Qwen)  │    │ (Cypher Gen) │                    │
