@@ -31,10 +31,7 @@ You are an expert at knowledge graph modeling with property graphs. Propose an a
 schema by specifying construction rules which transform approved files into nodes or relationships.
 The resulting schema should describe a knowledge graph based on the user goal.
 
-Consider critic feedback if available (from internal validation):
-<critic_feedback>
-{feedback}
-</critic_feedback>
+The critic may provide feedback through the review loop. Focus on addressing any issues in your proposal.
 
 IMPORTANT: Also pay close attention to the user's latest message in the conversation.
 If the user provides domain knowledge corrections (e.g., "上汽集团 纯电动 represents a vehicle series"),
@@ -133,9 +130,13 @@ PROPOSAL_INSTRUCTION = f"""
 CRITIC_ROLE_AND_GOAL = """
 You are an expert at knowledge graph modeling with property graphs.
 Criticize the proposed schema for relevance to the user goal and approved files.
+
+IMPORTANT: You must also detect DATA QUALITY issues that indicate preprocessing errors.
 """
 
 CRITIC_HINTS = """
+## Schema Validation Rules
+
 Criticize the proposed schema for relevance and correctness:
 - Are unique identifiers actually unique? Use the 'search_file' tool to validate. Composite identifier are not acceptable.
 - Could any nodes be relationships instead? Double-check that unique identifiers are unique and not references to other nodes. Use the 'search_file' tool to validate
@@ -143,9 +144,33 @@ Criticize the proposed schema for relevance and correctness:
 - Is every node in the schema connected? What relationships could be missing? Every node should connect to at least one other node.
 - Are hierarchical container relationships missing?
 - Are any relationships redundant? A relationship between two nodes is redundant if it is semantically equivalent to or the inverse of another relationship between those two nodes.
+
+## DATA QUALITY Validation Rules (Preprocessing Check)
+
+You must also detect if the SOURCE DATA itself has quality issues that require re-preprocessing:
+
+### Entity Value Validation
+- If entity values look like LONG DESCRIPTIONS instead of short names → reprocess needed
+- If entity values are PURE NUMBERS when names are expected → reprocess needed
+- Example BAD Brand value: "后排娱乐屏的开合方式及角度调节很灵活..." (this is an open-text answer, not a brand!)
+- Example GOOD Brand value: "乐道", "小鹏", "理想"
+
+### Source Column Validation
+- Brand entities should come from "品牌是?" columns, NOT from "启发项?" columns
+- Model entities should come from "车型及配置是?" columns, NOT from "成本控制?" columns
+- Store entities should come from "门店是" columns, NOT from rating columns
+- Rating scores should come from "打多少分?" columns
+
+### Foreign Key Validation
+- If respondent table lacks brand_id/model_id/store_id foreign keys when entities exist → reprocess needed
+
+### Aspect Name Validation
+- Aspect names should be semantic (e.g., "外观设计"), NOT question codes (e.g., "Q11")
 """
 
 CRITIC_CHAIN_OF_THOUGHT = """
+## Workflow
+
 Prepare for the task:
 - get the user goal using the 'get_approved_user_goal' tool
 - get the list of approved files using the 'get_approved_files' tool
@@ -153,10 +178,45 @@ Prepare for the task:
 - use the 'sample_file' and 'search_file' tools to validate the schema design
 
 Think carefully, using tools to perform actions and reconsidering your actions when a tool returns an error:
-1. Analyze each construction rule in the proposed construction plan.
-2. Use tools to validate the construction rules for relevance and correctness.
-3. If the schema looks good, respond with a one word reply: 'valid'.
-4. If the schema has problems, respond with 'retry' and provide feedback as a concise bullet list of problems.
+
+1. **Schema Validation**
+   - Analyze each construction rule in the proposed construction plan
+   - Validate unique identifiers are truly unique
+   - Check graph connectivity
+
+2. **Data Quality Validation**
+   - Sample entity files to check if values look correct
+   - For survey_*_entities.csv files:
+     - Check if Brand values are short names (< 20 chars), not descriptions
+     - Check if Model values are model+config format, not long text
+     - Check if Store values are addresses/names, not numbers
+   - Check source_column in entity files to ensure correct data source
+
+## Feedback Format
+
+Respond with ONE of these formats:
+
+### Schema is correct and data quality is good:
+```
+valid
+```
+
+### Schema needs adjustment (data is ok):
+```
+retry
+- [specific issue 1]
+- [specific issue 2]
+```
+
+### Data quality issue detected - need to re-preprocess:
+```
+reprocess:phase:reason
+
+Example: reprocess:ner:Brand entities extracted from open_text column Q90 instead of Q8
+Example: reprocess:rating:Aspect names are question codes Q11 instead of semantic names like 外观设计
+```
+
+The "phase" should be one of: column_classification, ner, rating, all
 """
 
 CRITIC_INSTRUCTION = f"""

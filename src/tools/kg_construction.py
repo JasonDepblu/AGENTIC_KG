@@ -4,12 +4,45 @@ Knowledge graph construction tools for Agentic KG.
 Tools for building and managing knowledge graph schemas and data import.
 """
 
-from typing import Any, Dict, List
+import json
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from google.adk.tools import ToolContext
 
 from .common import tool_success, tool_error
 from .file_suggestion import search_file, SEARCH_RESULTS
+from ..config import get_neo4j_import_dir
+
+
+def _to_relative_path(file_path: str) -> str:
+    """
+    Convert an absolute file path to a relative path for Neo4j LOAD CSV.
+
+    Neo4j in Docker can only access files relative to its import directory.
+    This function strips the NEO4J_IMPORT_DIR prefix to get the relative path.
+
+    Args:
+        file_path: Absolute or relative file path
+
+    Returns:
+        Relative path suitable for Neo4j LOAD CSV
+    """
+    import_dir = get_neo4j_import_dir()
+    if not import_dir:
+        # No import dir configured, return as-is
+        return file_path
+
+    file_path_obj = Path(file_path)
+    import_dir_obj = Path(import_dir)
+
+    # Check if it's an absolute path under the import directory
+    try:
+        relative = file_path_obj.relative_to(import_dir_obj)
+        return str(relative)
+    except ValueError:
+        # Not under import_dir, return original
+        return file_path
 
 # State keys
 PROPOSED_CONSTRUCTION_PLAN = "proposed_construction_plan"
@@ -55,7 +88,8 @@ def load_nodes_from_csv(
     label: str,
     unique_column_name: str,
     properties: List[str],
-    graphdb=None
+    graphdb=None,
+    import_all_columns: bool = True
 ) -> Dict[str, Any]:
     """
     Batch load nodes from a CSV file into Neo4j.
@@ -69,21 +103,44 @@ def load_nodes_from_csv(
         unique_column_name: Column containing unique identifier
         properties: List of column names to import as properties
         graphdb: Neo4j client instance (optional)
+        import_all_columns: If True, import all columns from CSV (default True)
 
     Returns:
         Dictionary with status indicating success or error
     """
+    import pandas as pd
+
     if graphdb is None:
         from ..neo4j_client import get_graphdb
         graphdb = get_graphdb()
 
-    # Build SET clause for properties
+    # Convert absolute path to relative path for Docker Neo4j
+    relative_file = _to_relative_path(source_file)
+
+    # If import_all_columns is True, read CSV headers to get all columns
+    if import_all_columns:
+        try:
+            import_dir = get_neo4j_import_dir()
+            if import_dir:
+                full_path = Path(import_dir) / relative_file
+            else:
+                full_path = Path(source_file)
+
+            if full_path.exists():
+                df = pd.read_csv(full_path, nrows=0)
+                all_columns = list(df.columns)
+                # Merge with provided properties, removing duplicates
+                properties = list(dict.fromkeys(properties + all_columns))
+        except Exception as e:
+            print(f"Warning: Could not read CSV headers: {e}")
+
+    # Build SET clause for properties (exclude unique column to avoid redundancy)
     set_clauses = ", ".join([f"n.`{prop}` = row.`{prop}`" for prop in properties if prop != unique_column_name])
     set_statement = f"SET {set_clauses}" if set_clauses else ""
 
     # Neo4j doesn't support parameterized labels, so we use f-string
     # Backticks escape special characters in identifiers
-    query = f"""LOAD CSV WITH HEADERS FROM 'file:///{source_file}' AS row
+    query = f"""LOAD CSV WITH HEADERS FROM 'file:///{relative_file}' AS row
     CALL (row) {{
         MERGE (n:`{label}` {{ `{unique_column_name}`: row.`{unique_column_name}` }})
         {set_statement}
@@ -101,7 +158,10 @@ def load_relationships_from_csv(
     to_node_label: str,
     to_node_column: str,
     properties: List[str],
-    graphdb=None
+    from_node_property: Optional[str] = None,
+    to_node_property: Optional[str] = None,
+    graphdb=None,
+    import_all_columns: bool = True
 ) -> Dict[str, Any]:
     """
     Batch load relationships from a CSV file into Neo4j.
@@ -116,25 +176,56 @@ def load_relationships_from_csv(
         to_node_label: Label of target nodes
         to_node_column: Column with target node identifier
         properties: List of column names to import as properties
+        from_node_property: Property to match on source node (optional)
+        to_node_property: Property to match on target node (optional)
         graphdb: Neo4j client instance (optional)
+        import_all_columns: If True, import all columns from CSV as properties (default True)
 
     Returns:
         Dictionary with status indicating success or error
     """
+    import pandas as pd
+
     if graphdb is None:
         from ..neo4j_client import get_graphdb
         graphdb = get_graphdb()
+
+    # Convert absolute path to relative path for Docker Neo4j
+    relative_file = _to_relative_path(source_file)
+
+    # If import_all_columns is True, read CSV headers to get all columns
+    if import_all_columns:
+        try:
+            import_dir = get_neo4j_import_dir()
+            if import_dir:
+                full_path = Path(import_dir) / relative_file
+            else:
+                full_path = Path(source_file)
+
+            if full_path.exists():
+                df = pd.read_csv(full_path, nrows=0)
+                all_columns = list(df.columns)
+                # Exclude from/to columns and relationship_type metadata
+                excluded_cols = {from_node_column, to_node_column, 'relationship_type'}
+                property_columns = [c for c in all_columns if c not in excluded_cols]
+                # Merge with provided properties, removing duplicates
+                properties = list(dict.fromkeys(properties + property_columns))
+        except Exception as e:
+            print(f"Warning: Could not read relationship CSV headers: {e}")
 
     # Build SET clause for relationship properties
     set_clauses = ", ".join([f"r.`{prop}` = row.`{prop}`" for prop in properties])
     set_statement = f"SET {set_clauses}" if set_clauses else ""
 
+    from_prop = from_node_property or from_node_column
+    to_prop = to_node_property or to_node_column
+
     # Neo4j doesn't support parameterized labels/types, so we use f-string
     # Backticks escape special characters in identifiers
-    query = f"""LOAD CSV WITH HEADERS FROM 'file:///{source_file}' AS row
+    query = f"""LOAD CSV WITH HEADERS FROM 'file:///{relative_file}' AS row
     CALL (row) {{
-        MATCH (from_node:`{from_node_label}` {{ `{from_node_column}`: row.`{from_node_column}` }})
-        MATCH (to_node:`{to_node_label}` {{ `{to_node_column}`: row.`{to_node_column}` }})
+        MATCH (from_node:`{from_node_label}` {{ `{from_prop}`: row.`{from_node_column}` }})
+        MATCH (to_node:`{to_node_label}` {{ `{to_prop}`: row.`{to_node_column}` }})
         MERGE (from_node)-[r:`{relationship_type}`]->(to_node)
         {set_statement}
     }} IN TRANSACTIONS OF 1000 ROWS
@@ -197,7 +288,9 @@ def import_relationships(
         relationship_construction["from_node_column"],
         relationship_construction["to_node_label"],
         relationship_construction["to_node_column"],
-        relationship_construction["properties"],
+        relationship_construction.get("properties", []),
+        relationship_construction.get("from_node_property"),
+        relationship_construction.get("to_node_property"),
         graphdb
     )
 
@@ -219,12 +312,61 @@ def construct_domain_graph(
     Returns:
         Dictionary with status and construction results
     """
+    # Accept stringified JSON plans
+    if isinstance(construction_plan, str):
+        try:
+            construction_plan = json.loads(construction_plan)
+        except Exception:
+            return tool_error("Construction plan must be a dict or JSON string representing a dict.")
+
+    if not isinstance(construction_plan, dict):
+        return tool_error(f"Construction plan must be a dict, got {type(construction_plan).__name__}")
+
     results = {"nodes": [], "relationships": []}
+
+    # Normalize older construction plan format (with nodes/relationships lists)
+    if "nodes" in construction_plan and isinstance(construction_plan.get("nodes"), list):
+        normalized_plan: Dict[str, Dict[str, Any]] = {}
+        node_prop_map: Dict[str, str] = {}
+        for node in construction_plan.get("nodes", []):
+            label = node.get("label")
+            if not label:
+                continue
+            rule = {
+                "construction_type": "node",
+                "source_file": node.get("file"),
+                "label": label,
+                "unique_column_name": node.get("unique_property"),
+                "properties": node.get("properties", []),
+            }
+            normalized_plan[f"node::{label}"] = rule
+            if node.get("unique_property"):
+                node_prop_map[label] = node["unique_property"]
+
+        for rel in construction_plan.get("relationships", []):
+            rel_type = rel.get("relationship_type")
+            if not rel_type:
+                continue
+            from_label = rel.get("from_node")
+            to_label = rel.get("to_node")
+            normalized_plan[f"rel::{rel_type}"] = {
+                "construction_type": "relationship",
+                "source_file": rel.get("file"),
+                "relationship_type": rel_type,
+                "from_node_label": from_label,
+                "to_node_label": to_label,
+                "from_node_column": "from_id",
+                "to_node_column": "to_id",
+                "from_node_property": node_prop_map.get(from_label, "from_id"),
+                "to_node_property": node_prop_map.get(to_label, "to_id"),
+                "properties": rel.get("properties", []),
+            }
+        construction_plan = normalized_plan
 
     # First, import all nodes
     node_constructions = [
         value for value in construction_plan.values()
-        if value.get('construction_type') == 'node'
+        if isinstance(value, dict) and value.get('construction_type') == 'node'
     ]
     for node_construction in node_constructions:
         result = import_nodes(node_construction, graphdb)

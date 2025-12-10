@@ -25,9 +25,20 @@ export type PipelinePhase =
   | 'idle'
   | 'user_intent'
   | 'file_suggestion'
+  // Data Cleaning phase (new)
+  | 'data_cleaning'
+  // Schema-First Pipeline phases
+  | 'schema_design'
+  | 'targeted_preprocessing'
+  | 'construction_plan'
+  // Super Coordinator mode (combines schema + preprocessing)
+  | 'schema_preprocess_coordinator'
+  // Legacy Pipeline phases
   | 'data_preprocessing'
   | 'schema_proposal'
+  // Common phases
   | 'construction'
+  | 'query'
   | 'complete'
   | 'error';
 
@@ -39,6 +50,8 @@ export interface ChatMessage {
   agentName?: string;
   phase?: PipelinePhase;
   isStreaming?: boolean;
+  isToolProgress?: boolean;  // Flag for tool call progress messages
+  isCriticFeedback?: boolean;  // Flag for critic agent validation messages
 }
 
 // Session types

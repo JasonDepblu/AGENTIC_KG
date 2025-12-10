@@ -1,192 +1,557 @@
 # Agentic KG
 
-A multi-agent system for building knowledge graphs from structured and unstructured data using Google ADK (Agent Development Kit). Features a ChatGPT-like web interface for interactive knowledge graph construction, natural language querying, and visualization.
+A multi-agent system for building knowledge graphs from structured and unstructured data using Google ADK (Agent Development Kit). Features a ChatGPT-like web interface for interactive knowledge graph construction, natural language querying, and 3D visualization.
 
-## Overview
+## Features
 
-Agentic KG orchestrates multiple AI agents to guide users through the complete knowledge graph lifecycle:
+- **Schema-First Design**: First design what to extract (schema), then execute extraction (preprocessing), with bidirectional feedback support
+- **Multi-Agent Pipeline**: Orchestrates 25+ specialized AI agents for each phase of KG construction
+- **Interactive Web Interface**: ChatGPT-like chat UI with real-time streaming updates
+- **3D Graph Visualization**: Interactive force-directed graph visualization
+- **Session Persistence**: Refresh page without losing progress, with ability to start new chats
+- **Natural Language Queries**: Query your knowledge graph using plain language (GraphRAG)
+- **Automatic Rollback**: Preprocessing can rollback to schema design when issues are detected
 
-### Pipeline Phases
-
-1. **User Intent** - Captures and clarifies user goals for the knowledge graph
-2. **File Suggestion** - Identifies and recommends relevant data files
-3. **Data Preprocessing** - Validates, transforms, and preprocesses data (ETL)
-4. **Schema Proposal** - Proposes graph schema with iterative refinement
-5. **Construction** - Executes the construction plan in Neo4j
-6. **Query** - Natural language querying of the constructed knowledge graph
-
-### Agent Architecture
-
-| Agent | Purpose | Key Tools |
-|-------|---------|-----------|
-| User Intent Agent | Capture and clarify user goals | `set_perceived_user_goal`, `approve_perceived_user_goal` |
-| File Suggestion Agent | Identify relevant data files | `list_available_files`, `sample_file`, `set_suggested_files` |
-| Data Preprocessing Agent | ETL operations on data files | `analyze_survey_format`, `extract_entities`, `extract_ratings` |
-| Schema Proposal Agent | Design graph schema | `propose_node_construction`, `propose_relationship_construction` |
-| Schema Critic Agent | Review and validate schemas | Evaluates schema quality and completeness |
-| KG Builder Agent | Execute Neo4j construction | `import_nodes`, `import_relationships` |
-| KG Query Agent | Natural language graph queries | `find_best_stores`, `search_entities`, `query_graph_cypher` |
-| NER Agent | Named entity recognition for unstructured text | `set_proposed_entities`, `approve_proposed_entities` |
-| Fact Type Agent | Relationship discovery for unstructured text | `add_proposed_fact`, `approve_proposed_facts` |
+---
 
 ## System Architecture
 
-```
-                                    ┌─────────────────────────────────┐
-                                    │         Web Interface           │
-                                    │    (React + TypeScript + Vite)  │
-                                    └───────────────┬─────────────────┘
-                                                    │ WebSocket
-                                    ┌───────────────┴─────────────────┐
-                                    │         FastAPI Backend          │
-                                    │      (Pipeline Orchestrator)     │
-                                    └───────────────┬─────────────────┘
-                                                    │
-                    ┌───────────────────────────────┼───────────────────────────────┐
-                    │                               │                               │
-            ┌───────┴───────┐               ┌───────┴───────┐               ┌───────┴───────┐
-            │  Structured   │               │ Unstructured  │               │   Query &     │
-            │  Data Path    │               │  Data Path    │               │  Analytics    │
-            └───────┬───────┘               └───────┬───────┘               └───────┬───────┘
-                    │                               │                               │
-    ┌───────────────┼───────────────┐               │                               │
-    ▼               ▼               ▼               ▼                               ▼
-┌────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐                   ┌──────────┐
-│  User  │    │   File   │    │  Data    │    │   NER    │                   │   KG     │
-│ Intent │───▶│Suggestion│───▶│Preprocess│    │  Agent   │                   │  Query   │
-│ Agent  │    │  Agent   │    │  Agent   │    └────┬─────┘                   │  Agent   │
-└────────┘    └──────────┘    └────┬─────┘         │                         └──────────┘
-                                   │               ▼
-                                   │         ┌──────────┐
-                                   │         │Fact Type │
-                                   │         │  Agent   │
-                                   │         └────┬─────┘
-                                   │              │
-                                   ▼              ▼
-                            ┌─────────────────────────────┐
-                            │   Schema Refinement Loop    │
-                            │  ┌──────────┐ ┌──────────┐  │
-                            │  │ Proposal │◀│  Critic  │  │
-                            │  │  Agent   │▶│  Agent   │  │
-                            │  └──────────┘ └──────────┘  │
-                            └──────────────┬──────────────┘
-                                           │
-                                           ▼
-                                    ┌──────────────┐
-                                    │  KG Builder  │
-                                    │    Agent     │
-                                    └──────┬───────┘
-                                           │
-                                           ▼
-                                    ┌──────────────┐
-                                    │    Neo4j     │
-                                    │   Database   │
-                                    └──────────────┘
-```
-
-## Data Flow
+### High-Level Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                              Pipeline State Flow                                 │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                 │
-│  ┌──────────────┐     ┌──────────────┐     ┌──────────────┐                    │
-│  │   User       │     │   Files      │     │  Preprocessing│                    │
-│  │   Intent     │────▶│   Selected   │────▶│   Results     │                    │
-│  │   Captured   │     │              │     │               │                    │
-│  └──────────────┘     └──────────────┘     └───────┬───────┘                    │
-│                                                    │                            │
-│  State Keys:                                       │                            │
-│  • approved_user_goal                              │                            │
-│  • approved_files                                  ▼                            │
-│  • preprocessing_complete              ┌──────────────────┐                    │
-│  • proposed_construction_plan          │  Schema Design   │                    │
-│  • approved_construction_plan          │  & Approval      │                    │
-│  • construction_complete               └────────┬─────────┘                    │
-│                                                  │                              │
-│                                                  ▼                              │
-│                                        ┌──────────────────┐                    │
-│                                        │  KG Construction │                    │
-│                                        │  in Neo4j        │                    │
-│                                        └────────┬─────────┘                    │
-│                                                  │                              │
-│                                                  ▼                              │
-│                                        ┌──────────────────┐                    │
-│                                        │  Query Phase     │                    │
-│                                        │  (GraphRAG)      │◀─── User Questions │
-│                                        └──────────────────┘                    │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Web Interface (React/TypeScript)                   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐ │
+│  │ Chat UI      │  │ Phase        │  │ File Browser │  │ Graph            │ │
+│  │ (Messages)   │  │ Indicator    │  │ (Sidebar)    │  │ Visualization    │ │
+│  └──────────────┘  └──────────────┘  └──────────────┘  └──────────────────┘ │
+│                              │ WebSocket (Real-time streaming)               │
+└──────────────────────────────┼──────────────────────────────────────────────┘
+                               │
+┌──────────────────────────────┼──────────────────────────────────────────────┐
+│                      FastAPI Backend (Port 8000)                             │
+│  ┌────────────────────────────────────────────────────────────────────────┐ │
+│  │                    Pipeline Service (Orchestrator)                      │ │
+│  │  Session Management │ Phase Control │ Event Streaming │ State Storage  │ │
+│  └────────────────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────┼──────────────────────────────────────────────┘
+                               │
+┌──────────────────────────────┼──────────────────────────────────────────────┐
+│                        Agent Layer (Google ADK)                              │
+│                                                                              │
+│  Phase 1         Phase 2           Phase 3          Phase 4                 │
+│  ┌─────────┐    ┌─────────────┐   ┌───────────┐   ┌─────────────────────┐   │
+│  │ User    │───►│ File        │──►│ Data      │──►│ Schema-Preprocess   │   │
+│  │ Intent  │    │ Suggestion  │   │ Cleaning  │   │ Coordinator         │   │
+│  │ Agent   │    │ Agent       │   │ Agent     │   │ ┌─────────────────┐ │   │
+│  └─────────┘    └─────────────┘   └───────────┘   │ │ Schema Design   │ │   │
+│                                                    │ │ Loop + Critic   │ │   │
+│                                                    │ └────────┬────────┘ │   │
+│                                                    │          ↕ rollback │   │
+│                                                    │ ┌────────┴────────┐ │   │
+│                                                    │ │ Preprocessing   │ │   │
+│                                                    │ │ Loop + Critic   │ │   │
+│                                                    │ └─────────────────┘ │   │
+│                                                    └──────────┬──────────┘   │
+│                                                               │              │
+│  Phase 5                    Phase 6                           │              │
+│  ┌─────────────┐           ┌─────────────────────┐            │              │
+│  │ KG Builder  │◄──────────┤ KG Query Agent      │◄───────────┘              │
+│  │ Agent       │           │ ┌─────────────────┐ │                           │
+│  └──────┬──────┘           │ │ Cypher Generator│ │                           │
+│         │                  │ │ Cypher Validator│ │                           │
+│         │                  │ │ Cypher Loop     │ │                           │
+│         │                  │ └─────────────────┘ │                           │
+│         │                  └─────────────────────┘                           │
+└─────────┼────────────────────────────────────────────────────────────────────┘
+          │
+┌─────────┼────────────────────────────────────────────────────────────────────┐
+│         ▼                  External Services                                  │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐                    │
+│  │   Neo4j      │    │  DashScope   │    │ Silicon Cloud│                    │
+│  │   Database   │    │  LLM (Qwen)  │    │ (Cypher Gen) │                    │
+│  └──────────────┘    └──────────────┘    └──────────────┘                    │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Pipeline Phases & Data Flow
+
+### Complete Pipeline Flow
+
+```
+USER_INTENT ──► FILE_SUGGESTION ──► DATA_CLEANING ──► SCHEMA_PREPROCESS_COORDINATOR ──► CONSTRUCTION ──► QUERY
+                                                               │
+                                                     ┌─────────┴─────────┐
+                                                     │                   │
+                                               SCHEMA_DESIGN ◄──────► TARGETED_PREPROCESSING
+                                                     │                   │
+                                                     └───── rollback ◄───┘
+```
+
+### Phase Details
+
+| Phase | Agent | Description | Key Tools |
+|-------|-------|-------------|-----------|
+| **USER_INTENT** | `user_intent_agent` | Captures and clarifies user goals for the knowledge graph | `set_perceived_user_goal`, `approve_perceived_user_goal` |
+| **FILE_SUGGESTION** | `file_suggestion_agent` | Identifies and recommends relevant data files | `list_available_files`, `sample_file`, `approve_suggested_files` |
+| **DATA_CLEANING** | `data_cleaning_agent` | Removes meaningless columns/rows, validates data quality | `analyze_file_quality`, `detect_column_types`, `clean_file` |
+| **SCHEMA_DESIGN** | `schema_design_agent` + critic | Designs target schema with nodes, relationships, extraction hints | `propose_node_type`, `propose_relationship_type`, `approve_target_schema` |
+| **TARGETED_PREPROCESSING** | `targeted_preprocessing_agent` + critic | Extracts entities and relationships based on schema | `extract_entities_for_node`, `extract_relationship_data`, `save_extracted_data` |
+| **CONSTRUCTION** | `kg_builder_agent` | Executes the construction plan in Neo4j | `construct_domain_graph`, `load_nodes_from_csv` |
+| **QUERY** | `kg_query_agent` | Natural language querying of the knowledge graph (GraphRAG) | `propose_cypher_query`, `execute_and_validate_query` |
+
+### Data Flow Diagram
+
+```
+                          ┌─────────────────┐
+                          │   User Input    │
+                          │ (Goal + Files)  │
+                          └────────┬────────┘
+                                   │
+                    ┌──────────────▼──────────────┐
+                    │      DATA CLEANING          │
+                    │  • Remove empty columns     │
+                    │  • Detect column types      │
+                    │  • Clean invalid data       │
+                    └──────────────┬──────────────┘
+                                   │
+                    ┌──────────────▼──────────────┐
+                    │      SCHEMA DESIGN          │
+                    │  • Analyze file structure   │
+                    │  • Detect entities          │
+                    │  • Define nodes + hints     │
+                    │  • Define relationships     │
+                    └──────────────┬──────────────┘
+                                   │
+                    ┌──────────────▼──────────────┐
+                    │  TARGETED PREPROCESSING     │
+                    │  • Extract entities by hint │
+                    │  • Extract relationships    │
+                    │  • LLM text extraction      │
+                    │  • Entity deduplication     │
+                    │  • Save to CSV files        │
+                    └──────────────┬──────────────┘
+                                   │
+         ┌─────────────────────────▼─────────────────────────┐
+         │                 CONSTRUCTION                       │
+         │  ┌─────────────────────────────────────────────┐  │
+         │  │  data/extracted_data/                       │  │
+         │  │  ├── Respondent_entities.csv               │  │
+         │  │  ├── Brand_entities.csv                    │  │
+         │  │  ├── RATES_relationships.csv               │  │
+         │  │  └── ...                                    │  │
+         │  └─────────────────────────────────────────────┘  │
+         │                        │                          │
+         │                        ▼                          │
+         │  ┌─────────────────────────────────────────────┐  │
+         │  │              Neo4j Database                 │  │
+         │  │  • Create uniqueness constraints            │  │
+         │  │  • Batch load nodes (1000/transaction)      │  │
+         │  │  • Create relationships                     │  │
+         │  └─────────────────────────────────────────────┘  │
+         └───────────────────────────────────────────────────┘
+                                   │
+                    ┌──────────────▼──────────────┐
+                    │          QUERY              │
+                    │  • Natural language input   │
+                    │  • Cypher generation        │
+                    │  • Query execution          │
+                    │  • Result formatting        │
+                    └─────────────────────────────┘
+```
+
+---
+
+## Tech Stack
+
+### Backend
+| Technology | Purpose |
+|------------|---------|
+| Python 3.10+ | Core language |
+| FastAPI | REST API + WebSocket server |
+| Google ADK | Agent Development Kit for multi-agent orchestration |
+| Neo4j | Graph database |
+| DashScope | LLM API (Alibaba Qwen models) |
+| Silicon Cloud | Secondary LLM (Qwen3-Coder for Cypher) |
+| Pydantic | Data validation |
+| LiteLLM | LLM abstraction layer with rate limiting |
+| Pandas | Data processing |
+
+### Frontend
+| Technology | Purpose |
+|------------|---------|
+| React 18 | UI framework |
+| TypeScript | Type safety |
+| Vite | Build tool |
+| Zustand | State management |
+| TailwindCSS | Styling |
+| react-force-graph-3d | 3D graph visualization |
+| Lucide React | Icons |
+
+---
 
 ## Project Structure
 
 ```
 Agentic_KG/
-├── src/                              # Core source code
-│   ├── config.py                     # Unified configuration management
-│   ├── llm.py                        # LLM interface (DashScope/OpenAI compatible)
-│   ├── neo4j_client.py               # Neo4j database client
-│   ├── embed_model.py                # Embedding model adapters
-│   │
-│   ├── tools/                        # Tool functions for agents
-│   │   ├── common.py                 # Common utilities (tool_success, tool_error)
-│   │   ├── user_intent.py            # User goal capture tools
-│   │   ├── file_suggestion.py        # File management tools
-│   │   ├── data_preprocessing.py     # ETL tools (extract, transform, normalize)
-│   │   ├── kg_construction.py        # Graph construction tools
-│   │   ├── kg_query.py               # Graph query tools (NEW)
-│   │   ├── kg_extraction.py          # GraphRAG extraction tools
-│   │   └── unstructured_extraction.py # NER and fact type tools
-│   │
-│   └── agents/                       # Agent definitions
-│       ├── base.py                   # AgentCaller base class
-│       ├── user_intent_agent.py      # User goal agent
-│       ├── file_suggestion_agent.py  # File selection agent
-│       ├── data_preprocessing_agent.py # ETL agent
-│       ├── schema_proposal_agent.py  # Schema design agent + critic
-│       ├── kg_builder_agent.py       # Neo4j construction agent
-│       ├── kg_query_agent.py         # Knowledge graph query agent (NEW)
-│       ├── ner_agent.py              # Named entity recognition agent
-│       ├── fact_type_agent.py        # Relationship discovery agent
-│       └── unstructured_data_agent.py # Unstructured data orchestrator
-│
 ├── api/                              # FastAPI backend
-│   ├── main.py                       # FastAPI app entry point
+│   ├── main.py                       # FastAPI app with CORS configuration
 │   ├── routes/
-│   │   ├── files.py                  # File management endpoints
 │   │   ├── chat.py                   # WebSocket chat endpoint
+│   │   ├── files.py                  # File listing and preview
 │   │   ├── sessions.py               # Session management
 │   │   └── graph.py                  # Graph visualization API
 │   ├── services/
-│   │   ├── pipeline.py               # Pipeline orchestrator with streaming
-│   │   └── file_manager.py           # File operations
+│   │   └── pipeline.py               # Pipeline orchestrator with streaming
 │   └── models/
-│       └── schemas.py                # Pydantic models (includes PipelinePhase)
+│       └── schemas.py                # Pydantic request/response models
+│
+├── src/                              # Core agent and tool logic
+│   ├── config.py                     # Configuration management
+│   ├── llm.py                        # LLM interface with rate limiting
+│   ├── neo4j_client.py               # Neo4j database client
+│   │
+│   ├── models/
+│   │   └── target_schema.py          # TargetSchema, NodeDefinition, RelationshipDefinition
+│   │
+│   ├── agents/                       # 25+ Agent definitions (Google ADK)
+│   │   ├── base.py                   # AgentCaller wrapper class
+│   │   ├── user_intent_agent.py      # Phase 1: User goal capture
+│   │   ├── file_suggestion_agent.py  # Phase 2: File selection
+│   │   ├── data_cleaning_agent.py    # Phase 3: Data quality improvement
+│   │   ├── schema_design_agent.py    # Phase 4a: Schema design + critic + loop
+│   │   ├── targeted_preprocessing_agent.py  # Phase 4b: Data extraction + critic + loop
+│   │   ├── schema_preprocess_coordinator.py # Super coordinator with rollback
+│   │   ├── kg_builder_agent.py       # Phase 5: Neo4j construction
+│   │   ├── kg_query_agent.py         # Phase 6: Natural language queries
+│   │   ├── cypher_generator_agent.py # Cypher query generation
+│   │   ├── cypher_validator_agent.py # Cypher validation
+│   │   ├── cypher_loop_agent.py      # Query refinement loop
+│   │   ├── survey_*.py               # Survey-specific agents
+│   │   └── ...                       # More specialized agents
+│   │
+│   └── tools/                        # Tool functions for agents (~13,000 lines)
+│       ├── common.py                 # Utility functions
+│       ├── user_intent.py            # User goal tools
+│       ├── file_suggestion.py        # File management tools
+│       ├── data_cleaning.py          # Data cleaning tools
+│       ├── schema_design.py          # Schema design tools
+│       ├── targeted_preprocessing.py # Entity/relationship extraction
+│       ├── kg_construction.py        # Graph construction tools
+│       ├── kg_query.py               # Graph query tools
+│       ├── kg_extraction.py          # Text extraction tools
+│       ├── cypher_validation.py      # Cypher validation tools
+│       └── survey_*.py               # Survey-specific tools
 │
 ├── frontend/                         # React frontend
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Chat/                 # Chat interface components
-│   │   │   ├── Sidebar/              # File browser
-│   │   │   └── Graph/                # Graph visualization
-│   │   ├── hooks/                    # Custom React hooks
-│   │   ├── stores/                   # Zustand state stores
-│   │   └── api/                      # API client
-│   └── package.json
+│   │   │   ├── Chat/                 # Chat interface
+│   │   │   │   ├── ChatContainer.tsx # Main chat container
+│   │   │   │   ├── MessageList.tsx   # Message list with streaming
+│   │   │   │   ├── Message.tsx       # Individual message component
+│   │   │   │   ├── InputBar.tsx      # User input
+│   │   │   │   └── PhaseIndicator.tsx# Pipeline phase display
+│   │   │   ├── Graph/
+│   │   │   │   └── GraphVisualization.tsx  # 3D force graph
+│   │   │   └── Sidebar/
+│   │   │       └── FileTree.tsx      # File browser
+│   │   ├── hooks/
+│   │   │   ├── useWebSocket.ts       # WebSocket with session persistence
+│   │   │   └── useFiles.ts           # File operations
+│   │   ├── stores/
+│   │   │   ├── chatStore.ts          # Chat message state
+│   │   │   └── fileStore.ts          # File browser state
+│   │   ├── types/
+│   │   │   └── index.ts              # TypeScript definitions
+│   │   └── api/
+│   │       └── client.ts             # REST API client
+│   ├── package.json
+│   └── tsconfig.json
 │
-├── reference/                        # Reference notebooks from course
-│   ├── schema_proposal_structured.ipynb
-│   ├── schema_proposal_unstructured.ipynb
-│   ├── kg_construction_1.ipynb
-│   └── kg_construction_2.ipynb
+├── data/                             # Data files for KG construction
+│   └── extracted_data/               # Generated entity/relationship CSVs
 │
-├── data/                             # Sample data files
 ├── main.py                           # CLI entry point
+├── test_pipeline.py                  # Pipeline smoke test
 ├── docker-compose.yml                # Neo4j Docker configuration
-└── requirements.txt                  # Python dependencies
+├── requirements.txt                  # Python dependencies
+└── .env                              # Environment variables
 ```
+
+---
+
+## Agent Inventory
+
+### Core Pipeline Agents
+
+| Agent | Phase | Purpose |
+|-------|-------|---------|
+| `user_intent_agent` | 1 | Capture and clarify user goals |
+| `file_suggestion_agent` | 2 | File discovery and selection |
+| `data_cleaning_agent` | 3 | Data quality improvement |
+| `schema_design_agent` | 4a | Design target schema |
+| `targeted_preprocessing_agent` | 4b | Extract entities/relationships |
+| `schema_preprocess_coordinator` | 4 | Orchestrate schema + preprocessing with rollback |
+| `kg_builder_agent` | 5 | Execute Neo4j import |
+| `kg_query_agent` | 6 | Natural language queries |
+
+### Query Refinement Agents
+
+| Agent | Purpose |
+|-------|---------|
+| `cypher_generator_agent` | Generate Cypher from natural language |
+| `cypher_validator_agent` | Validate and execute Cypher |
+| `cypher_loop_agent` | Query refinement loop |
+
+### Specialized Agents
+
+| Agent | Purpose |
+|-------|---------|
+| `survey_preprocessing_coordinator` | Survey-specific data processing |
+| `survey_column_classifier_agent` | Classify survey column types |
+| `survey_ner_agent` | Extract entities from surveys |
+| `survey_rating_agent` | Extract ratings from surveys |
+| `ner_agent` | Named entity recognition |
+| `unstructured_data_agent` | Unstructured text processing |
+
+---
+
+## Extraction Hints
+
+### Entity Extraction Types
+
+| source_type | Description | Example |
+|-------------|-------------|---------|
+| `entity_selection` | Extract unique values from column | Brand names, Store names |
+| `column_header` | Extract entity names from headers | Aspect names from rating columns |
+| `text_extraction` | LLM-based text entity extraction | Entities from open-ended responses |
+
+### Relationship Extraction Types
+
+| source_type | Description | Example |
+|-------------|-------------|---------|
+| `rating_column` | Extract ratings from columns | RATES (Respondent → Aspect) |
+| `entity_reference` | Extract entity selections per row | EVALUATED (Respondent → Brand) |
+| `foreign_key` | Extract via foreign key columns | BELONGS_TO (Model → Brand) |
+
+### Example Schema Definition
+
+```python
+{
+  "nodes": [
+    {
+      "label": "Respondent",
+      "unique_property": "respondent_id",
+      "properties": ["respondent_id", "name"],
+      "extraction_hints": {
+        "source_type": "entity_selection",
+        "column_pattern": "序号"
+      }
+    },
+    {
+      "label": "Aspect",
+      "unique_property": "aspect_id",
+      "properties": ["aspect_id", "name"],
+      "extraction_hints": {
+        "source_type": "column_header",
+        "column_pattern": "打多少分|评分",
+        "name_regex": "[\""]([^\"\"]+)[\""]"
+      }
+    }
+  ],
+  "relationships": [
+    {
+      "type": "RATES",
+      "from_node": "Respondent",
+      "to_node": "Aspect",
+      "properties": ["score"],
+      "extraction_hints": {
+        "source_type": "rating_column",
+        "column_pattern": "打多少分"
+      }
+    }
+  ]
+}
+```
+
+---
+
+## Frontend Architecture
+
+### State Management (Zustand)
+
+```typescript
+// Chat Store State
+interface ChatStore {
+  sessionId: string | null;
+  phase: PipelinePhase;
+  sessionState: Record<string, unknown>;
+  messages: ChatMessage[];
+  isConnected: boolean;
+  isLoading: boolean;
+}
+```
+
+### WebSocket Communication
+
+The frontend maintains a persistent WebSocket connection with session management:
+
+```typescript
+// Message types from server
+type MessageType =
+  | 'connected'       // Session initialized
+  | 'phase_change'    // Pipeline phase transition
+  | 'agent_event'     // Agent execution (streaming)
+  | 'phase_complete'  // Phase finished
+  | 'error';          // Error occurred
+
+// Message types to server
+{ type: 'message', content: string }  // User message
+{ type: 'approve', phase: string }    // Approve phase result
+{ type: 'cancel' }                    // Cancel current operation
+```
+
+### Session Persistence
+
+Sessions are persisted using localStorage:
+
+- **Page Refresh**: Automatically reconnects to previous session
+- **New Chat**: Button to clear session and start fresh
+- **Auto-reconnect**: Reconnects after disconnection (3s delay)
+
+---
+
+## API Endpoints
+
+### Chat Routes
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| WebSocket | `/chat/{session_id}` | Real-time chat with agents |
+
+### File Routes
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/files` | List files in import directory |
+| GET | `/api/files/{path}` | Get file content preview |
+| POST | `/api/files/upload` | Upload new file |
+
+### Session Routes
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/sessions` | Create new session |
+| GET | `/api/sessions/{id}` | Get session info |
+| GET | `/api/sessions` | List all sessions |
+
+### Graph Routes
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/graph/schema` | Get node labels and relationship types |
+| GET | `/api/graph/stats` | Graph statistics |
+| GET | `/api/graph/sample` | Get full graph sample |
+| GET | `/api/graph/nodes` | Fetch nodes for visualization |
+| GET | `/api/graph/export` | Export graph as ZIP |
+| DELETE | `/api/graph/clear` | Clear all graph data |
+
+---
+
+## Schema-First Pipeline
+
+### Schema Design Loop
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│              LoopAgent: schema_design_loop                     │
+│              max_iterations: 4                                 │
+├────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────────┐                                      │
+│  │ schema_design_agent  │  ◄── Designs nodes and relationships │
+│  │     (LlmAgent)       │      Calls propose_node_type, etc.   │
+│  └──────────┬───────────┘                                      │
+│             │                                                  │
+│             ▼                                                  │
+│  ┌──────────────────────┐                                      │
+│  │ schema_design_critic │  ◄── Validates schema quality        │
+│  │     (LlmAgent)       │                                      │
+│  └──────────┬───────────┘                                      │
+│             │                                                  │
+│             ▼ "valid" or "retry"                               │
+│  ┌──────────────────────┐                                      │
+│  │ CheckSchemaStatus    │  ◄── Checks if schema approved       │
+│  └──────────────────────┘                                      │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Targeted Preprocessing Loop
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│           LoopAgent: preprocessing_sub_loop                    │
+│           max_iterations: 3                                    │
+├────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────────────┐                                  │
+│  │ targeted_preprocessing   │  ◄── Extracts entities/relations │
+│  │     _agent (LlmAgent)    │      Based on schema hints       │
+│  └──────────┬───────────────┘                                  │
+│             │                                                  │
+│             ▼                                                  │
+│  ┌──────────────────────────┐                                  │
+│  │ preprocessing_critic     │  ◄── Validates extraction        │
+│  │     (LlmAgent)           │      quality                     │
+│  └──────────┬───────────────┘                                  │
+│             │                                                  │
+│             ▼                                                  │
+│  ┌──────────────────────────┐                                  │
+│  │ CheckPreprocessingStatus │  ◄── May trigger rollback        │
+│  └──────────────────────────┘                                  │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Rollback Mechanism
+
+When preprocessing encounters issues, it can request schema revision:
+
+```
+Preprocessing Agent detects issue
+         │
+         ▼ request_schema_revision(reason, suggested_changes)
+         │
+         ▼ Sets NEEDS_SCHEMA_REVISION = true
+         │
+CheckCoordinatorStatus detects rollback
+         │
+         ▼ Clears approved schema, resets preprocessing state
+         │
+         ▼ Next iteration → Schema Design Agent
+         │
+         ▼ get_schema_revision_reason() → sees rollback context
+         │
+         ▼ Addresses suggested_changes in redesign
+```
+
+---
+
+## LLM Configuration
+
+### Primary LLM: DashScope (Alibaba Qwen)
+- **API Base**: `https://dashscope.aliyuncs.com/compatible-mode/v1`
+- **Default Model**: `qwen-plus-latest`
+- **Flash Model**: `qwen-flash` (fast, cheap)
+- **Embedding**: `text-embedding-v3`
+
+### Secondary LLM: Silicon Cloud
+- **API Base**: `https://api.siliconflow.cn/v1`
+- **Model**: `Qwen/Qwen3-Coder-480B-A35B-Instruct` (Cypher generation)
+
+### Rate Limit Protection
+- Max retries: 5
+- Base delay: 5 seconds
+- Max delay: 120 seconds
+- Fallback models: qwen-plus-latest → qwen-turbo-latest
+
+---
 
 ## Quick Start
 
@@ -195,7 +560,7 @@ Agentic_KG/
 - Python 3.10+
 - Node.js 18+ (for web interface)
 - Docker (for Neo4j)
-- DashScope API key (or other OpenAI-compatible LLM)
+- DashScope API key
 
 ### 2. Installation
 
@@ -206,52 +571,94 @@ cd Agentic_KG
 
 # Create virtual environment
 python -m venv venv_adk
-source venv_adk/bin/activate  # On Windows: venv_adk\Scripts\activate
+source venv_adk/bin/activate  # Windows: venv_adk\Scripts\activate
 
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
+
+# Install frontend dependencies
+cd frontend
+npm install
+cd ..
 ```
 
 ### 3. Configuration
 
-```bash
-# Copy environment template
-cp .env.example .env
+Create `.env` file:
 
-# Edit .env with your settings
-# Required:
-#   - DASHSCOPE_API_KEY
-#   - NEO4J_PASSWORD
-#   - NEO4J_IMPORT_DIR (path to your data files)
+```bash
+# Required
+DASHSCOPE_API_KEY=your_api_key_here
+NEO4J_PASSWORD=your_password_here
+NEO4J_IMPORT_DIR=/path/to/your/data
+
+# Optional
+NEO4J_URI=bolt://localhost:7687
+NEO4J_USERNAME=neo4j
+LLM_MODEL=qwen-plus-latest
+SILICON_API_KEY=your_silicon_key_here
 ```
 
-### 4. Start Neo4j
+### 4. Start Services
 
 ```bash
+# Start Neo4j
 docker compose up -d
-```
 
-### 5. Run the Application
-
-**Option A: Web Interface (Recommended)**
-
-```bash
-# Terminal 1: Start the backend API
+# Terminal 1: Start backend API
 source venv_adk/bin/activate
 uvicorn api.main:app --reload --port 8000
 
-# Terminal 2: Start the frontend
+# Terminal 2: Start frontend
 cd frontend
-npm install  # First time only
 npm run dev
 ```
 
+### 5. Access
+
 Open http://localhost:5173 in your browser.
 
-**Option B: Command Line**
+---
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DASHSCOPE_API_KEY` | DashScope API key | Required |
+| `DASHSCOPE_BASE_URL` | API base URL | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
+| `LLM_MODEL` | Default LLM model | `qwen-plus-latest` |
+| `NEO4J_URI` | Neo4j connection URI | `bolt://localhost:7687` |
+| `NEO4J_USERNAME` | Neo4j username | `neo4j` |
+| `NEO4J_PASSWORD` | Neo4j password | Required |
+| `NEO4J_IMPORT_DIR` | Path to import directory | Required |
+| `SILICON_API_KEY` | Silicon Cloud API key | Optional |
+| `TEXT_EXTRACTION_ENABLE_DEDUP` | Enable entity deduplication | `true` |
+
+---
+
+## State Management
+
+### Key Session State Variables
+
+| State Key | Set By | Used By | Description |
+|-----------|--------|---------|-------------|
+| `approved_user_goal` | User Intent Agent | All agents | User's approved goal |
+| `approved_files` | File Suggestion Agent | All agents | Selected data files |
+| `data_cleaning_complete` | Data Cleaning Agent | Coordinator | Cleaning phase done |
+| `target_schema` | Schema Design Agent | Critic, Preprocessing | Current schema design |
+| `approved_target_schema` | Schema Design Agent | Preprocessing | User-approved schema |
+| `schema_design_feedback` | Schema Critic | Design Agent | Validation result |
+| `targeted_extraction_results` | Preprocessing Agent | Critic, Builder | Extracted entities |
+| `targeted_preprocessing_complete` | Preprocessing Agent | Coordinator | Preprocessing done |
+| `needs_schema_revision` | Preprocessing Agent | Coordinator | Rollback trigger |
+| `construction_rules` | Preprocessing Agent | Builder | Import instructions |
+
+---
+
+## CLI Usage
 
 ```bash
-# Test connections
+# Test connections (Neo4j, LLM)
 python main.py --test-connection
 
 # Run demonstration
@@ -259,230 +666,56 @@ python main.py --demo
 
 # Interactive mode
 python main.py --interactive
+
+# Verbose logging
+python main.py --verbose
 ```
 
-## Features
-
-### Web Interface
-
-The web interface provides a ChatGPT-like experience for building knowledge graphs.
-
-- **Chat Interface**: Interactive conversation with AI agents
-- **File Browser**: Browse and select data files from the import directory
-- **Phase Indicator**: Visual feedback showing the current pipeline phase
-- **Graph Visualization**: Interactive force-directed graph view with filtering
-
-### Data Preprocessing (ETL)
-
-The Data Preprocessing Agent handles various data transformations:
-
-| Tool | Purpose |
-|------|---------|
-| `analyze_survey_format` | Detect survey/questionnaire format patterns |
-| `classify_columns` | Classify columns as ID, entity, rating, opinion, etc. |
-| `normalize_values` | Handle special values (N/A, -, etc.) |
-| `split_multi_value_column` | Split comma-separated values into rows |
-| `extract_entities` | Extract entity values from columns |
-| `extract_ratings` | Extract numeric ratings with metadata |
-| `extract_opinion_pairs` | Extract subject-opinion pairs |
-
-### Knowledge Graph Query (GraphRAG)
-
-After construction, the KG Query Agent enables natural language queries:
-
-```
-User: "Which store has the best ratings?"
-Agent: Uses find_best_stores() tool to query Neo4j and summarize results
-
-User: "What do customers think about service quality?"
-Agent: Uses analyze_aspect_sentiment() to aggregate sentiment data
-```
-
-Available query tools:
-- `get_graph_schema` - Get node labels and relationship types
-- `get_graph_statistics` - Get counts and metrics
-- `find_best_stores` - Rank entities by ratings/opinions
-- `find_store_opinions` - Search opinions with filters
-- `search_entities` - Full-text entity search
-- `analyze_aspect_sentiment` - Sentiment analysis by aspect
-- `query_graph_cypher` - Custom Cypher queries
-
-### API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/health` | GET | Health check |
-| `/api/files` | GET | List files in import directory |
-| `/api/files/upload` | POST | Upload file |
-| `/api/sessions` | GET/POST | Manage chat sessions |
-| `/api/chat/{session_id}` | WebSocket | Real-time chat |
-| `/api/graph/schema` | GET | Get graph schema |
-| `/api/graph/stats` | GET | Get node/relationship counts |
-| `/api/graph/sample` | GET | Get sample graph data |
-| `/api/graph/filter-options/{label}` | GET | Get filter options for a label |
-| `/api/graph/by-center-node/{node_id}` | GET | Get graph centered on a node |
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DASHSCOPE_API_KEY` | DashScope API key | Required |
-| `DASHSCOPE_BASE_URL` | API base URL | `https://dashscope.aliyuncs.com/compatible-mode/v1` |
-| `LLM_MODEL` | Default LLM model | `qwen-plus-latest` |
-| `EMBEDDING_MODEL` | Embedding model | `text-embedding-v3` |
-| `NEO4J_URI` | Neo4j connection URI | `bolt://localhost:7687` |
-| `NEO4J_USERNAME` | Neo4j username | `neo4j` |
-| `NEO4J_PASSWORD` | Neo4j password | Required |
-| `NEO4J_DATABASE` | Neo4j database name | `neo4j` |
-| `NEO4J_IMPORT_DIR` | Path to import directory | Required for file access |
-
-### Supported LLM Models
-
-The system uses DashScope's OpenAI-compatible API:
-
-- `qwen-plus-latest` (default, recommended for stability)
-- `qwen3-235b-a22b-instruct-2507` (larger model)
-- `Moonshot-Kimi-K2-Instruct`
-
-## Usage Examples
-
-### Interactive Web Flow
-
-1. Start the application
-2. Describe your goal: "I want to analyze customer feedback about car dealerships"
-3. Review and approve suggested files
-4. Let the preprocessing agent transform the data
-5. Review and approve the proposed schema
-6. Build the knowledge graph
-7. Ask questions: "Which dealership has the best service ratings?"
-
-### Programmatic Usage
-
-```python
-import asyncio
-from src.agents import create_kg_query_agent, make_agent_caller
-
-async def query_knowledge_graph():
-    # Create query agent
-    agent = create_kg_query_agent()
-    caller = await make_agent_caller(agent, {
-        "construction_complete": True  # Assumes KG exists
-    })
-
-    # Ask questions
-    response = await caller.call("Which store has the best ratings?")
-    print(response)
-
-asyncio.run(query_knowledge_graph())
-```
-
-### Using Individual Agents
-
-```python
-from src.agents import create_user_intent_agent, make_agent_caller
-
-async def capture_user_intent():
-    agent = create_user_intent_agent()
-    caller = await make_agent_caller(agent)
-
-    await caller.call("I want to build a customer feedback analysis graph")
-    await caller.call("Approve that goal")
-
-    session = await caller.get_session()
-    print(f"Approved goal: {session.state['approved_user_goal']}")
-```
-
-## Key Concepts
-
-### Pipeline Phases
-
-```python
-class PipelinePhase(str, Enum):
-    IDLE = "idle"
-    USER_INTENT = "user_intent"
-    FILE_SUGGESTION = "file_suggestion"
-    DATA_PREPROCESSING = "data_preprocessing"
-    SCHEMA_PROPOSAL = "schema_proposal"
-    CONSTRUCTION = "construction"
-    QUERY = "query"        # NEW: GraphRAG query phase
-    COMPLETE = "complete"
-    ERROR = "error"
-```
-
-### Tool Context State
-
-Agents share information through a session state dictionary:
-
-| State Key | Set By | Used By |
-|-----------|--------|---------|
-| `approved_user_goal` | User Intent Agent | All subsequent agents |
-| `approved_files` | File Suggestion Agent | Preprocessing, Schema agents |
-| `preprocessing_complete` | Preprocessing Agent | Schema agent |
-| `proposed_construction_plan` | Schema Agent | Critic, Builder |
-| `approved_construction_plan` | Schema Agent | Builder |
-| `construction_complete` | Builder Agent | Query Agent |
-
-### Propose-Approve Pattern
-
-The system uses a collaborative pattern:
-1. Agent proposes a solution
-2. User reviews the proposal
-3. User approves or provides feedback
-4. Approved items are stored for subsequent agents
-
-## Development
-
-### Adding New Agents
-
-1. Create agent file in `src/agents/`
-2. Define instruction prompt
-3. Specify required tools
-4. Export from `src/agents/__init__.py`
-
-### Adding New Tools
-
-1. Create tool function in appropriate `src/tools/` module
-2. Use `tool_success()` and `tool_error()` for responses
-3. Access state via `tool_context.state`
-4. Export from `src/tools/__init__.py`
-
-### Testing
-
-```bash
-# Test connections
-python main.py --test-connection
-
-# Run with verbose output
-python main.py --demo --verbose
-```
+---
 
 ## Troubleshooting
 
-### Rate Limiting
+### Rate Limiting Errors
 
-If you encounter rate limit errors:
-- The system uses `qwen-plus-latest` by default which has looser limits
-- Rate limits typically recover within 1 minute
-- Consider using batch API for non-real-time tasks
+The system includes built-in retry with exponential backoff:
+- Max retries: 5
+- Base delay: 5 seconds
+- Max delay: 120 seconds
 
-### Connection Issues
+### Schema Design Loop Issues
 
-```bash
-# Test all connections
-python main.py --test-connection
-```
+If the schema design loop keeps retrying:
+- Check extraction hints use correct `source_type`
+- Ensure column patterns match actual column names
+- Review critic feedback for specific issues
 
-### Neo4j Issues
+### Extraction Returns 0 Results
 
-```bash
-# Check Docker logs
-docker logs neo4j
+If entity/relationship extraction returns empty:
+- Verify column names match `column_pattern`
+- Check `source_type` is appropriate for data type
+- Use `request_schema_revision()` to rollback and fix schema
 
-# Restart container
-docker compose restart neo4j
-```
+### WebSocket Connection Issues
+
+If the frontend shows "disconnected":
+- Check backend is running on port 8000
+- Verify no CORS issues in browser console
+- Session will auto-reconnect after 3 seconds
+
+---
+
+## Code Statistics
+
+| Component | Lines of Code |
+|-----------|---------------|
+| Agent Code (`src/agents/`) | ~6,000 |
+| Tool Code (`src/tools/`) | ~13,000 |
+| API Code (`api/`) | ~2,000 |
+| Frontend Code (`frontend/src/`) | ~3,000 |
+| **Total** | **~24,000** |
+
+---
 
 ## License
 
@@ -492,6 +725,6 @@ MIT License - See LICENSE file for details.
 
 - [Google ADK](https://github.com/google/adk-python) - Agent Development Kit
 - [Neo4j](https://neo4j.com/) - Graph Database
-- [Neo4j GraphRAG](https://github.com/neo4j/neo4j-graphrag-python) - GraphRAG Library
 - [LiteLLM](https://github.com/BerriAI/litellm) - LLM Abstraction Layer
-- [DashScope](https://dashscope.aliyun.com/) - LLM API Provider
+- [DashScope](https://dashscope.aliyun.com/) - LLM API Provider (Alibaba Qwen)
+- [React Force Graph](https://github.com/vasturiano/react-force-graph) - 3D Graph Visualization

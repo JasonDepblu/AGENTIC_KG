@@ -90,15 +90,18 @@ class AgentCaller:
                 )
 
             # Check for final response
+            # Note: For LoopAgents, final events come from sub-agents, not the loop itself
+            # So we just check is_final_response() without checking author
+            # BUT: We need content because before_agent_callbacks emit empty final events
             if event.is_final_response():
                 if event.content and event.content.parts:
                     final_response_text = event.content.parts[0].text
+                    break  # Only break on final response WITH content
                 elif event.actions and event.actions.escalate:
                     final_response_text = (
                         f"Agent escalated: "
                         f"{event.error_message or 'No specific message.'}"
                     )
-                if event.author == self.agent.name:
                     break
 
         # Update session reference

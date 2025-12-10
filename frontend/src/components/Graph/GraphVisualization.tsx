@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import ForceGraph2D, { ForceGraphMethods, NodeObject } from 'react-force-graph-2d';
-import { X, RefreshCw, ZoomIn, ZoomOut, Maximize2, ChevronDown } from 'lucide-react';
+import { X, RefreshCw, ZoomIn, ZoomOut, Maximize2, ChevronDown, Trash2, Download } from 'lucide-react';
 
 interface GraphNode {
   id: string;
@@ -44,8 +44,18 @@ interface FilterOption {
 
 // Color palette for different node labels
 const LABEL_COLORS: Record<string, string> = {
+  // Survey data node types
+  Respondent: '#10a37f',
+  Aspect: '#f59e0b',
+  Brand: '#3b82f6',
+  Model: '#8b5cf6',
+  Store: '#ec4899',
+  Entity: '#14b8a6',
+  // Legacy node types
   BrandPowertrain: '#10a37f',
   VehicleAttribute: '#3b82f6',
+  Attribute: '#f97316',
+  AttentionAttribute: '#ef4444',
   Product: '#f59e0b',
   Category: '#ef4444',
   Person: '#8b5cf6',
@@ -227,6 +237,67 @@ export function GraphVisualization({ isOpen, onClose }: Props) {
     setValueDropdownOpen(false);
   };
 
+  const handleClearDatabase = async () => {
+    if (!window.confirm('确定要清空数据库吗？此操作不可撤销。')) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch('/api/graph/clear', { method: 'DELETE' });
+      if (res.ok) {
+        // Refresh data after clearing
+        setGraphData(null);
+        setStats(null);
+        setSchema(null);
+        setSelectedLabel('');
+        setFilterOptions([]);
+        await fetchSchema();
+      } else {
+        const error = await res.json();
+        alert(`清空失败: ${error.detail || '未知错误'}`);
+      }
+    } catch (err) {
+      alert(`清空失败: ${err instanceof Error ? err.message : '未知错误'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadData = async () => {
+    try {
+      const res = await fetch('/api/graph/export');
+      if (!res.ok) {
+        const error = await res.json();
+        alert(`下载失败: ${error.detail || '未知错误'}`);
+        return;
+      }
+
+      // Get filename from Content-Disposition header or use default
+      const contentDisposition = res.headers.get('Content-Disposition');
+      let filename = 'graph_export.zip';
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename="?([^"]+)"?/);
+        if (match) {
+          filename = match[1];
+        }
+      }
+
+      // Download the file
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err) {
+      alert(`下载失败: ${err instanceof Error ? err.message : '未知错误'}`);
+    }
+  };
+
   // Get labels that have nodes
   const labelsWithNodes = schema?.labels.filter(
     label => (schema.node_counts[label] || 0) > 0
@@ -284,6 +355,20 @@ export function GraphVisualization({ isOpen, onClose }: Props) {
               title="适应窗口"
             >
               <Maximize2 className="w-5 h-5 text-text-secondary" />
+            </button>
+            <button
+              onClick={handleDownloadData}
+              className="p-2 rounded hover:bg-green-900/30 transition-colors"
+              title="下载图谱数据"
+            >
+              <Download className="w-5 h-5 text-green-400" />
+            </button>
+            <button
+              onClick={handleClearDatabase}
+              className="p-2 rounded hover:bg-red-900/30 transition-colors"
+              title="清空数据库"
+            >
+              <Trash2 className="w-5 h-5 text-red-400" />
             </button>
             <button
               onClick={onClose}
@@ -457,9 +542,13 @@ export function GraphVisualization({ isOpen, onClose }: Props) {
                 const fontSize = 12 / globalScale;
                 ctx.font = `${fontSize}px Sans-Serif`;
 
-                // Center node or selected label nodes are bigger
-                const isCenter = n.isCenter || (selectedFilterValue !== '__all__' && n.label === selectedLabel);
-                const nodeSize = isCenter ? 14 : 6;
+                // Determine node size based on selection state
+                // - Center node (from specific filter): largest
+                // - Nodes matching selected label type: medium (highlighted)
+                // - Other nodes: small
+                const isExactCenter = n.isCenter || (selectedFilterValue !== '__all__' && n.label === selectedLabel);
+                const isSelectedType = n.label === selectedLabel;
+                const nodeSize = isExactCenter ? 14 : (isSelectedType ? 10 : 5);
 
                 // Draw node circle
                 ctx.beginPath();
@@ -467,18 +556,18 @@ export function GraphVisualization({ isOpen, onClose }: Props) {
                 ctx.fillStyle = getNodeColor(n.label);
                 ctx.fill();
 
-                // Draw border for center node
-                if (n.isCenter) {
-                  ctx.strokeStyle = '#ffffff';
-                  ctx.lineWidth = 2;
+                // Draw border for highlighted nodes (center or selected type)
+                if (isExactCenter || isSelectedType) {
+                  ctx.strokeStyle = isExactCenter ? '#ffffff' : 'rgba(255,255,255,0.5)';
+                  ctx.lineWidth = isExactCenter ? 2 : 1;
                   ctx.stroke();
                 }
 
-                // Draw label if zoomed in enough
-                if (globalScale > 0.4) {
+                // Draw label for highlighted nodes or when zoomed in
+                if (isSelectedType || globalScale > 0.5) {
                   ctx.textAlign = 'center';
                   ctx.textBaseline = 'top';
-                  ctx.fillStyle = '#ececec';
+                  ctx.fillStyle = isSelectedType ? '#ffffff' : '#ececec';
                   ctx.fillText(label, n.x, n.y + nodeSize + 2);
                 }
               }}

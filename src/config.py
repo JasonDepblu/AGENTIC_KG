@@ -34,7 +34,8 @@ class Neo4jConfig:
 
 @dataclass
 class LLMConfig:
-    """LLM configuration for DashScope API."""
+    """LLM configuration supporting multiple providers."""
+    # DashScope (primary provider)
     api_key: str = field(default_factory=lambda: os.getenv("DASHSCOPE_API_KEY", ""))
     api_base: str = field(default_factory=lambda: os.getenv(
         "DASHSCOPE_BASE_URL",
@@ -49,12 +50,30 @@ class LLMConfig:
         "text-embedding-v3"  # DashScope embedding model
     ))
 
+    # Silicon Cloud (for specialized tasks like Cypher generation)
+    silicon_api_key: str = field(default_factory=lambda: os.getenv("SILICON_API_KEY", ""))
+    silicon_api_base: str = field(default_factory=lambda: os.getenv(
+        "SILICON_API_BASE",
+        "https://api.siliconflow.cn/v1"
+    ))
+    silicon_model: str = field(default_factory=lambda: os.getenv(
+        "SILICON_MODEL",
+        "Qwen/Qwen3-Coder-480B-A35B-Instruct"
+    ))
+
     # Available models
     MODELS = {
         "kimi": "Moonshot-Kimi-K2-Instruct",
         "qwen-large": "qwen3-235b-a22b-instruct-2507",
         "qwen-plus": "qwen-plus-latest",
         "qwen-medium": "qwen3-30b-a3b-instruct-2507",
+        "qwen-flash": "qwen-flash",  # Fast and cheap, supports deep thinking
+    }
+
+    # Silicon Cloud models
+    SILICON_MODELS = {
+        "qwen3-coder": "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+        "qwen3-large": "Qwen/Qwen3-235B-A22B-FP8",
     }
 
     def validate(self) -> bool:
@@ -71,10 +90,32 @@ class LLMConfig:
 
 
 @dataclass
+class TextExtractionConfig:
+    """Configuration for text feedback column extraction."""
+    # Whether to require user confirmation for extracted entity types
+    require_user_confirmation: bool = field(
+        default_factory=lambda: os.getenv("TEXT_EXTRACTION_REQUIRE_CONFIRMATION", "true").lower() == "true"
+    )
+    # Enable LLM-based entity deduplication
+    enable_entity_dedup: bool = field(
+        default_factory=lambda: os.getenv("TEXT_EXTRACTION_ENABLE_DEDUP", "true").lower() == "true"
+    )
+    # Batch size for LLM text extraction calls
+    batch_size: int = field(
+        default_factory=lambda: int(os.getenv("TEXT_EXTRACTION_BATCH_SIZE", "10"))
+    )
+    # LLM model for text analysis (defaults to qwen-plus-latest)
+    model: str = field(
+        default_factory=lambda: os.getenv("TEXT_EXTRACTION_MODEL", "qwen-plus-latest")
+    )
+
+
+@dataclass
 class AppConfig:
     """Application-wide configuration."""
     neo4j: Neo4jConfig = field(default_factory=Neo4jConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
+    text_extraction: TextExtractionConfig = field(default_factory=TextExtractionConfig)
 
     # Logging
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))

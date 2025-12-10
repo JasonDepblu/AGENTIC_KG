@@ -5,11 +5,11 @@ import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
 import { PhaseIndicator } from './PhaseIndicator';
 import { GraphVisualization } from '../Graph/GraphVisualization';
-import { Network } from 'lucide-react';
+import { Network, Plus } from 'lucide-react';
 
 export function ChatContainer() {
   const { phase, isConnected, isLoading } = useChatStore();
-  const { connect, disconnect, sendMessage, connectionStatus } = useWebSocket();
+  const { connect, disconnect, sendMessage, connectionStatus, startNewChat } = useWebSocket();
   const [showGraph, setShowGraph] = useState(false);
 
   useEffect(() => {
@@ -37,6 +37,14 @@ export function ChatContainer() {
           <PhaseIndicator phase={phase} />
         </div>
         <div className="flex items-center gap-4">
+          <button
+            onClick={startNewChat}
+            className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-500 rounded-lg transition-colors"
+            title="Start New Chat"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="text-sm font-medium">New Chat</span>
+          </button>
           <button
             onClick={() => setShowGraph(true)}
             className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded-lg transition-colors"

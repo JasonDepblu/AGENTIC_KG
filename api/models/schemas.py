@@ -46,12 +46,43 @@ class FileUploadResponse(BaseModel):
 # Chat/Session Models
 
 class PipelinePhase(str, Enum):
-    """Current phase of the KG pipeline."""
+    """Current phase of the KG pipeline.
+
+    New Pipeline Flow (with Data Cleaning):
+    USER_INTENT → FILE_SUGGESTION → DATA_CLEANING → SCHEMA_PREPROCESS_COORDINATOR
+    → CONSTRUCTION_PLAN → CONSTRUCTION → QUERY
+
+    The DATA_CLEANING phase cleans raw data files before schema proposal:
+    - Removes meaningless columns (empty, constant, unnamed)
+    - Removes invalid rows (mostly empty, duplicates)
+    - Detects column types for schema design
+
+    The SCHEMA_PREPROCESS_COORDINATOR combines SCHEMA_DESIGN and TARGETED_PREPROCESSING
+    with bidirectional feedback support (automatic rollback from preprocessing to schema design).
+
+    Schema-First Pipeline Flow (separate phases, legacy):
+    USER_INTENT → FILE_SUGGESTION → SCHEMA_DESIGN → TARGETED_PREPROCESSING
+    → CONSTRUCTION_PLAN → CONSTRUCTION → QUERY
+
+    Legacy Pipeline Flow (still supported):
+    USER_INTENT → FILE_SUGGESTION → DATA_PREPROCESSING → SCHEMA_PROPOSAL
+    → CONSTRUCTION → QUERY
+    """
     IDLE = "idle"
     USER_INTENT = "user_intent"
     FILE_SUGGESTION = "file_suggestion"
+    # New Data Cleaning Phase
+    DATA_CLEANING = "data_cleaning"  # Clean raw data before schema proposal
+    # Schema-First Pipeline Phases (Super Coordinator mode)
+    SCHEMA_PREPROCESS_COORDINATOR = "schema_preprocess_coordinator"  # Combined schema design + preprocessing with rollback
+    # Schema-First Pipeline Phases (Separate phases, for backwards compatibility)
+    SCHEMA_DESIGN = "schema_design"  # Design target schema before preprocessing
+    TARGETED_PREPROCESSING = "targeted_preprocessing"  # Extract only what schema defines
+    CONSTRUCTION_PLAN = "construction_plan"  # Generate construction rules from schema
+    # Legacy Pipeline Phases (still supported)
     DATA_PREPROCESSING = "data_preprocessing"
     SCHEMA_PROPOSAL = "schema_proposal"
+    # Common Phases
     CONSTRUCTION = "construction"
     QUERY = "query"  # GraphRAG query phase - after KG construction
     COMPLETE = "complete"
@@ -80,6 +111,10 @@ class SessionState(BaseModel):
     """Current state of a pipeline session."""
     approved_user_goal: Optional[Dict[str, Any]] = None
     approved_files: Optional[List[str]] = None
+    # Schema-First Pipeline State
+    target_schema: Optional[Dict[str, Any]] = None  # Current target schema being designed
+    approved_target_schema: Optional[Dict[str, Any]] = None  # Approved target schema
+    # Legacy Pipeline State
     preprocessing_complete: Optional[bool] = None
     proposed_construction_plan: Optional[Dict[str, Any]] = None
     approved_construction_plan: Optional[Dict[str, Any]] = None

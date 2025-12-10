@@ -126,6 +126,7 @@ def clear_user_goal(tool_context: ToolContext) -> Dict[str, Any]:
     Returns:
         Dictionary with status indicating goals were cleared
     """
-    tool_context.state.pop(PERCEIVED_USER_GOAL, None)
-    tool_context.state.pop(APPROVED_USER_GOAL, None)
+    # ADK State doesn't support __delitem__, so set to None to "clear"
+    tool_context.state[PERCEIVED_USER_GOAL] = None
+    tool_context.state[APPROVED_USER_GOAL] = None
     return tool_success("message", "User goals have been cleared.")

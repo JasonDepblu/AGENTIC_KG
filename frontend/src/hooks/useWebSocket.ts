@@ -4,7 +4,10 @@ import type { WebSocketMessage, PipelinePhase } from '../types';
 
 // Global WebSocket instance to persist across React StrictMode remounts
 let globalWs: WebSocket | null = null;
-let globalSessionId: string | null = null;
+
+// Session persistence using localStorage
+const SESSION_STORAGE_KEY = 'agentic_kg_session_id';
+let globalSessionId: string | null = localStorage.getItem(SESSION_STORAGE_KEY);
 
 export function useWebSocket() {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
@@ -18,10 +21,13 @@ export function useWebSocket() {
     addMessage,
     updateMessage,
     setLoading,
+    clearMessages,
   } = useChatStore();
 
   const messageIdRef = useRef(0);
   const currentMessageIdRef = useRef<string | null>(null);
+  const toolProgressIdRef = useRef<string | null>(null);  // Track tool progress message
+  const authorMessageIdsRef = useRef<Map<string, string>>(new Map());  // Track message IDs per author
 
   const generateMessageId = () => {
     messageIdRef.current += 1;
@@ -29,12 +35,19 @@ export function useWebSocket() {
   };
 
   const formatPhase = (phase: PipelinePhase): string => {
-    const labels: Record<PipelinePhase, string> = {
+    const labels: Partial<Record<PipelinePhase, string>> = {
       idle: 'Ready',
       user_intent: 'Understanding Your Goal',
       file_suggestion: 'Analyzing Files',
+      data_cleaning: 'Cleaning Data',
+      schema_design: 'Designing Schema',
+      targeted_preprocessing: 'Extracting Data',
+      construction_plan: 'Planning Construction',
+      schema_preprocess_coordinator: 'Processing Schema',
+      data_preprocessing: 'Preprocessing Data',
       schema_proposal: 'Designing Graph Schema',
       construction: 'Building Knowledge Graph',
+      query: 'Querying Graph',
       complete: 'Complete',
       error: 'Error',
     };
@@ -52,6 +65,8 @@ export function useWebSocket() {
           globalSessionId = message.content || null;
           if (message.content) {
             setSessionId(message.content);
+            // Persist session ID to localStorage
+            localStorage.setItem(SESSION_STORAGE_KEY, message.content);
           }
           if (message.phase) {
             setPhase(message.phase);
@@ -78,10 +93,54 @@ export function useWebSocket() {
 
         case 'agent_event':
           if (message.content) {
-            if (message.is_final) {
-              if (currentMessageIdRef.current) {
-                updateMessage(currentMessageIdRef.current, message.content);
-                currentMessageIdRef.current = null;
+            // Check if this is a tool progress message (author="Tool")
+            const isToolProgress = message.author === 'Tool';
+            // Check if this is a critic agent message
+            const isCritic = message.author?.includes('critic');
+            const authorKey = message.author || 'unknown';
+
+            if (isToolProgress) {
+              // Tool progress messages: replace the existing tool progress message
+              if (toolProgressIdRef.current) {
+                updateMessage(toolProgressIdRef.current, message.content);
+              } else {
+                const id = generateMessageId();
+                toolProgressIdRef.current = id;
+                addMessage({
+                  id,
+                  role: 'agent',
+                  content: message.content,
+                  timestamp: new Date(),
+                  agentName: message.author,
+                  phase: message.phase,
+                  isStreaming: true,
+                  isToolProgress: true,
+                });
+              }
+            } else if (isCritic) {
+              // Critic messages: always create new message (don't consolidate)
+              // This makes intermediate validation feedback visible
+              addMessage({
+                id: generateMessageId(),
+                role: 'agent',
+                content: message.content,
+                timestamp: new Date(),
+                agentName: message.author,
+                phase: message.phase,
+                isStreaming: false,
+                isCriticFeedback: true,
+              });
+              // Clear the current message ref for this author to avoid mixing
+              authorMessageIdsRef.current.delete(authorKey);
+            } else if (message.is_final) {
+              // Clear tool progress when we get a final message
+              toolProgressIdRef.current = null;
+
+              // Use author-based tracking
+              const existingId = authorMessageIdsRef.current.get(authorKey);
+              if (existingId) {
+                updateMessage(existingId, message.content);
+                authorMessageIdsRef.current.delete(authorKey);
               } else {
                 addMessage({
                   id: generateMessageId(),
@@ -94,10 +153,19 @@ export function useWebSocket() {
                 });
               }
               setLoading(false);
+              // Clear currentMessageIdRef for backward compatibility
+              currentMessageIdRef.current = null;
             } else {
-              if (!currentMessageIdRef.current) {
+              // Don't clear toolProgressIdRef here - let tool progress continue updating in place
+              // It will be cleared on final messages (is_final=true) or phase completion
+
+              // Use author-based tracking for streaming messages
+              const existingId = authorMessageIdsRef.current.get(authorKey);
+              if (existingId) {
+                updateMessage(existingId, message.content);
+              } else {
                 const id = generateMessageId();
-                currentMessageIdRef.current = id;
+                authorMessageIdsRef.current.set(authorKey, id);
                 addMessage({
                   id,
                   role: 'agent',
@@ -107,9 +175,9 @@ export function useWebSocket() {
                   phase: message.phase,
                   isStreaming: true,
                 });
-              } else {
-                updateMessage(currentMessageIdRef.current, message.content);
               }
+              // Keep currentMessageIdRef updated for backward compatibility
+              currentMessageIdRef.current = authorMessageIdsRef.current.get(authorKey) || null;
             }
           }
           break;
@@ -138,6 +206,8 @@ export function useWebSocket() {
           }
           setLoading(false);
           currentMessageIdRef.current = null;
+          toolProgressIdRef.current = null;  // Clear tool progress on phase completion
+          authorMessageIdsRef.current.clear();  // Clear author message tracking
           break;
 
         case 'state_update':
@@ -157,6 +227,8 @@ export function useWebSocket() {
           setPhase('error');
           setLoading(false);
           currentMessageIdRef.current = null;
+          toolProgressIdRef.current = null;  // Clear tool progress on error
+          authorMessageIdsRef.current.clear();  // Clear author message tracking on error
           break;
       }
     } catch (error) {
@@ -290,19 +362,65 @@ export function useWebSocket() {
     globalWs.send(JSON.stringify({ type: 'cancel' }));
   }, []);
 
-  // Connect on mount, update message handler when it changes
+  const startNewChat = useCallback(() => {
+    console.log('Starting new chat session');
+
+    // Clear localStorage
+    localStorage.removeItem(SESSION_STORAGE_KEY);
+    globalSessionId = null;
+
+    // Close existing WebSocket connection
+    if (globalWs) {
+      globalWs.onclose = null;  // Prevent auto-reconnect
+      globalWs.close();
+      globalWs = null;
+    }
+
+    // Clear chat messages and reset state
+    clearMessages();
+    setPhase('idle');
+    setSessionId('');
+    setSessionState({});
+
+    // Reconnect (will create new session)
+    connect();
+  }, [connect, clearMessages, setPhase, setSessionId, setSessionState]);
+
+  // Connect on mount, update all handlers when they change
   useEffect(() => {
     connect();
 
-    // Update message handler on the existing connection
+    // Update ALL handlers on the existing connection to fix React StrictMode closure issues
+    // Without this, the old handlers would reference stale state after remount
     if (globalWs) {
       globalWs.onmessage = handleMessage;
+      globalWs.onopen = () => {
+        console.log('WebSocket opened successfully (updated handler)');
+        setConnectionStatus('connected');
+        setConnected(true);
+      };
+      globalWs.onclose = (event) => {
+        console.log('WebSocket closed:', event.code, event.reason);
+        setConnectionStatus('disconnected');
+        setConnected(false);
+      };
+      globalWs.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      // If already connected, update status immediately
+      if (globalWs.readyState === WebSocket.OPEN) {
+        setConnectionStatus('connected');
+        setConnected(true);
+      } else if (globalWs.readyState === WebSocket.CONNECTING) {
+        setConnectionStatus('connecting');
+      }
     }
 
     return () => {
       disconnect();
     };
-  }, [connect, disconnect, handleMessage]);
+  }, [connect, disconnect, handleMessage, setConnected]);
 
   return {
     connectionStatus,
@@ -311,5 +429,6 @@ export function useWebSocket() {
     sendMessage,
     approve,
     cancel,
+    startNewChat,
   };
 }

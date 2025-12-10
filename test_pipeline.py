@@ -1,223 +1,278 @@
+#!/usr/bin/env python3
 """
-Test script for Agentic KG pipeline.
+End-to-end smoke test for the schema-first pipeline on data/序号.csv.
 
-Tests the full pipeline flow using data/data_process.csv as the data source.
+This script:
+- Designs a schema tailored to “分析一下不同的人对于不同的车型的属性的情感需求”
+- Runs targeted preprocessing (entity + relationship extraction)
+- Saves extracted CSVs and generates a construction plan
+- Optionally imports into Neo4j if connectivity is configured
+
+It avoids WebSocket/UI dependencies so you can validate the core modules quickly.
 """
 
-import asyncio
-import sys
+from __future__ import annotations
+
+import json
+import os
 from pathlib import Path
+from typing import Dict
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent))
-
-from src.llm import get_adk_llm
-from src.agents.base import make_agent_caller
-from src.agents.user_intent_agent import create_user_intent_agent
-from src.agents.file_suggestion_agent import create_file_suggestion_agent
-from src.agents.schema_proposal_agent import create_schema_refinement_loop
-from src.tools.user_intent import APPROVED_USER_GOAL, PERCEIVED_USER_GOAL
-from src.tools.kg_construction import APPROVED_CONSTRUCTION_PLAN
-
-
-async def test_user_intent_agent():
-    """Test the user intent agent flow."""
-    print("\n" + "=" * 60)
-    print("Testing User Intent Agent")
-    print("=" * 60)
-
-    llm = get_adk_llm()
-    agent = create_user_intent_agent(llm)
-
-    # Initial state
-    initial_state = {}
-
-    caller = await make_agent_caller(agent, initial_state)
-
-    # Step 1: User describes their goal
-    print("\n[Step 1] User: 我想构建一个车企用户关注度知识图谱，分析不同车企的用户对各种属性的关注程度")
-    response = await caller.call("我想构建一个车企用户关注度知识图谱，分析不同车企的用户对各种属性的关注程度")
-    print(f"Agent Response: {response}")
-
-    # Check state
-    session = await caller.get_session()
-    print(f"\nState after Step 1:")
-    print(f"  - perceived_user_goal: {PERCEIVED_USER_GOAL in session.state}")
-    print(f"  - approved_user_goal: {APPROVED_USER_GOAL in session.state}")
-    if PERCEIVED_USER_GOAL in session.state:
-        print(f"  - Goal content: {session.state[PERCEIVED_USER_GOAL]}")
-
-    # Step 2: User approves
-    print("\n[Step 2] User: 是的，按照这个目标构建")
-    response = await caller.call("是的，按照这个目标构建")
-    print(f"Agent Response: {response}")
-
-    # Check state
-    session = await caller.get_session()
-    print(f"\nState after Step 2:")
-    print(f"  - perceived_user_goal: {PERCEIVED_USER_GOAL in session.state}")
-    print(f"  - approved_user_goal: {APPROVED_USER_GOAL in session.state}")
-    if APPROVED_USER_GOAL in session.state:
-        print(f"  - Approved goal: {session.state[APPROVED_USER_GOAL]}")
-        return session.state
-    else:
-        print("\nERROR: User goal was not approved!")
-        return None
+from src.tools.schema_design import (
+    approve_target_schema,
+    get_target_schema,
+    propose_node_type,
+    propose_relationship_type,
+)
+from src.tools.targeted_preprocessing import (
+    complete_targeted_preprocessing,
+    extract_entities_for_node,
+    extract_relationship_data,
+    generate_construction_rules,
+    get_extraction_summary,
+    save_extracted_data,
+)
+from src.tools.kg_construction import construct_domain_graph
 
 
-async def test_file_suggestion_agent(state: dict):
-    """Test the file suggestion agent flow."""
-    print("\n" + "=" * 60)
-    print("Testing File Suggestion Agent")
-    print("=" * 60)
-
-    llm = get_adk_llm()
-    agent = create_file_suggestion_agent(llm)
-
-    caller = await make_agent_caller(agent, state)
-
-    # Ask for file suggestions
-    print("\n[Step 1] Asking for file suggestions...")
-    response = await caller.call("What files can we use for import?")
-    print(f"Agent Response: {response}")
-
-    # Check state
-    session = await caller.get_session()
-    print(f"\nState - approved_files: {'approved_files' in session.state}")
-
-    # Approve files
-    print("\n[Step 2] User: Approve those files")
-    response = await caller.call("Approve those files")
-    print(f"Agent Response: {response}")
-
-    session = await caller.get_session()
-    if "approved_files" in session.state:
-        print(f"  - Approved files: {session.state['approved_files']}")
-        return session.state
-    else:
-        print("\nERROR: Files were not approved!")
-        return None
+DATA_FILE = "序号.csv"
+OUTPUT_DIR = "targeted_preprocessing_output"
+USER_QUERY = "分析一下不同的人对于不同的车型的属性的情感需求"
 
 
-async def test_schema_proposal_agent(state: dict):
-    """Test the schema proposal agent flow."""
-    print("\n" + "=" * 60)
-    print("Testing Schema Proposal Agent")
-    print("=" * 60)
+class DummyToolContext:
+    """Minimal ToolContext stand-in (only .state is used by tool functions)."""
 
-    llm = get_adk_llm()
-
-    # Add empty feedback
-    state["feedback"] = ""
-
-    loop = create_schema_refinement_loop(llm)
-
-    caller = await make_agent_caller(loop, state)
-
-    # Ask for schema proposal
-    print("\n[Step 1] Asking for schema proposal...")
-    response = await caller.call("How can these files be imported?")
-    print(f"Agent Response: {response[:500]}..." if len(response) > 500 else f"Agent Response: {response}")
-
-    # Check state
-    session = await caller.get_session()
-    print(f"\nState - proposed_construction_plan: {'proposed_construction_plan' in session.state}")
-    print(f"State - approved_construction_plan: {APPROVED_CONSTRUCTION_PLAN in session.state}")
-
-    if "proposed_construction_plan" in session.state:
-        return session.state
-    return None
+    def __init__(self) -> None:
+        self.state: Dict[str, object] = {}
 
 
-async def test_llm_basic():
-    """Basic LLM connectivity test."""
-    print("\n" + "=" * 60)
-    print("Testing LLM Basic Connectivity")
-    print("=" * 60)
+def ensure_import_dir() -> Path:
+    """Ensure NEO4J_IMPORT_DIR points to repo/data so tools can read/write."""
+    repo_root = Path(__file__).resolve().parent
+    data_dir = repo_root / "data"
+    if not data_dir.exists():
+        raise FileNotFoundError(f"data directory not found at {data_dir}")
+    os.environ.setdefault("NEO4J_IMPORT_DIR", str(data_dir.resolve()))
+    return data_dir
 
-    import litellm
-    from src.config import get_config
 
-    config = get_config()
+def design_schema(ctx: DummyToolContext) -> None:
+    """Design and approve a schema matching 序号.csv for the sentiment-by-vehicle query."""
+    # Seed user intent and file approval so downstream tools have context
+    ctx.state["approved_user_goal"] = {"goal": USER_QUERY}
+    ctx.state["approved_files"] = [DATA_FILE]
 
-    print(f"LLM Model: {config.llm.default_model}")
-    print(f"API Base: {config.llm.api_base}")
+    def ensure_ok(result: Dict, step: str) -> None:
+        if result.get("status") == "error":
+            raise RuntimeError(f"{step} failed: {result.get('error_message')}")
 
-    # Try a simple completion using litellm directly
-    try:
-        response = litellm.completion(
-            model=f"openai/{config.llm.default_model}",
-            messages=[{"role": "user", "content": "Say 'Hello, test successful!'"}],
-            api_key=config.llm.api_key,
-            api_base=config.llm.api_base,
+    # Node definitions
+    ensure_ok(
+        propose_node_type(
+        label="Respondent",
+        unique_property="respondent_id",
+        properties=["name", "source_column", "source_file"],
+        entity_type="Respondent",
+        extraction_hints={
+            "source_type": "entity_selection",
+            "column_pattern": r"^序号$",
+        },
+        tool_context=ctx,
+        ),
+        "Propose Respondent",
+    )
+    ensure_ok(
+        propose_node_type(
+        label="Brand",
+        unique_property="brand_id",
+        properties=["name", "source_column", "source_file"],
+        entity_type="Brand",
+        extraction_hints={
+            "source_type": "entity_selection",
+            "column_pattern": "品牌",
+        },
+        tool_context=ctx,
+        ),
+        "Propose Brand",
+    )
+    ensure_ok(
+        propose_node_type(
+        label="Model",
+        unique_property="model_id",
+        properties=["name", "source_column", "source_file"],
+        entity_type="Model",
+        extraction_hints={
+            "source_type": "entity_selection",
+            "column_pattern": "车型.*配置",
+        },
+        tool_context=ctx,
+        ),
+        "Propose Model",
+    )
+    ensure_ok(
+        propose_node_type(
+        label="Aspect",
+        unique_property="aspect_id",
+        properties=["name", "source_column", "source_file"],
+        entity_type="Aspect",
+        extraction_hints={
+            "source_type": "column_header",
+            "column_pattern": "打多少分|评分",
+            "name_regex": "“([^”]+)”",
+        },
+        tool_context=ctx,
+        ),
+        "Propose Aspect",
+    )
+
+    # Relationship definitions
+    ensure_ok(
+        propose_relationship_type(
+        relationship_type="EVALUATED_BRAND",
+        from_node="Respondent",
+        to_node="Brand",
+        properties=["source_column"],
+        extraction_hints={
+            "source_type": "entity_reference",
+            "column_pattern": "品牌",
+            "respondent_column": r"^序号$",
+        },
+        tool_context=ctx,
+        ),
+        "Propose EVALUATED_BRAND",
+    )
+    ensure_ok(
+        propose_relationship_type(
+        relationship_type="EVALUATED_MODEL",
+        from_node="Respondent",
+        to_node="Model",
+        properties=["source_column"],
+        extraction_hints={
+            "source_type": "entity_reference",
+            "column_pattern": "车型.*配置",
+            "respondent_column": r"^序号$",
+        },
+        tool_context=ctx,
+        ),
+        "Propose EVALUATED_MODEL",
+    )
+    ensure_ok(
+        propose_relationship_type(
+        relationship_type="RATES",
+        from_node="Respondent",
+        to_node="Aspect",
+        properties=["score", "source_column"],
+        extraction_hints={
+            "source_type": "rating_column",
+            "column_pattern": "打多少分|评分",
+            "respondent_column": r"^序号$",
+            "name_regex": "“([^”]+)”",
+        },
+        tool_context=ctx,
+        ),
+        "Propose RATES",
+    )
+    ensure_ok(
+        propose_relationship_type(
+        relationship_type="MODEL_BELONGS_TO_BRAND",
+        from_node="Model",
+        to_node="Brand",
+        properties=["source_column"],
+        extraction_hints={
+            "source_type": "foreign_key",
+            "from_column": "车型.*配置",
+            "to_column": "品牌",
+        },
+        tool_context=ctx,
+        ),
+        "Propose MODEL_BELONGS_TO_BRAND",
+    )
+
+    # Approve schema
+    ensure_ok(approve_target_schema(tool_context=ctx), "Approve schema")
+    schema_summary = get_target_schema(tool_context=ctx)
+    print("\n[Schema]\n", schema_summary.get("target_schema", {}).get("summary", ""))
+
+
+def run_preprocessing(ctx: DummyToolContext) -> None:
+    """Extract entities and relationships according to the approved schema."""
+    file_path = DATA_FILE
+
+    for node in ["Respondent", "Brand", "Model", "Aspect"]:
+        result = extract_entities_for_node(
+            file_path=file_path,
+            node_label=node,
+            tool_context=ctx,
         )
-        print(f"LLM Response: {response.choices[0].message.content}")
-        return True
-    except Exception as e:
-        print(f"LLM Error: {type(e).__name__}: {e}")
-        return False
+        if result.get("status") == "error":
+            raise RuntimeError(f"Entity extraction failed for {node}: {result}")
+        print(f"[Entity Extraction] {node}: {result['extracted_entities']['count']}")
+
+    for rel in ["EVALUATED_BRAND", "EVALUATED_MODEL", "RATES", "MODEL_BELONGS_TO_BRAND"]:
+        result = extract_relationship_data(
+            file_path=file_path,
+            relationship_type=rel,
+            tool_context=ctx,
+        )
+        if result.get("status") == "error":
+            raise RuntimeError(f"Relationship extraction failed for {rel}: {result}")
+        print(f"[Relationship Extraction] {rel}: {result['extracted_relationships']['count']}")
+
+    summary = get_extraction_summary(tool_context=ctx)
+    print("\n[Extraction Summary]\n", json.dumps(summary["extraction_summary"], indent=2, ensure_ascii=False))
 
 
-async def main():
-    """Run all tests."""
-    print("=" * 60)
-    print("Agentic KG Pipeline Test")
-    print("=" * 60)
-    print(f"Data file: data/data_process.csv")
+def persist_and_plan(ctx: DummyToolContext) -> Dict:
+    """Save extracted data and generate a construction plan."""
+    saved = save_extracted_data(
+        output_dir=OUTPUT_DIR,
+        tool_context=ctx,
+        prefix="targeted",
+    )
+    if saved.get("status") == "error":
+        raise RuntimeError(saved["error_message"])
+    print("\n[Saved Files]")
+    for f in saved["saved_files"]["files"]:
+        print(f" - {f['type']}: {f['path']} ({f['count']})")
 
-    # Test 1: Basic LLM connectivity
-    llm_ok = await test_llm_basic()
-    if not llm_ok:
-        print("\n❌ LLM connectivity failed. Check your API credentials.")
+    plan = generate_construction_rules(tool_context=ctx)
+    if plan.get("status") == "error":
+        raise RuntimeError(plan["error_message"])
+    print("\n[Construction Plan]\n", json.dumps(plan["construction_rules"], indent=2, ensure_ascii=False))
+
+    complete_targeted_preprocessing(tool_context=ctx)
+    return plan["construction_rules"]
+
+
+def maybe_build_graph(construction_plan: Dict) -> None:
+    """Attempt to build the graph in Neo4j if credentials are present."""
+    password = os.getenv("NEO4J_PASSWORD")
+    if not password:
+        print("\n[Neo4j] NEO4J_PASSWORD not set, skipping graph import.")
         return
-    print("\n✅ LLM connectivity OK")
 
-    # Test 2: User Intent Agent
     try:
-        state = await test_user_intent_agent()
-        if state and APPROVED_USER_GOAL in state:
-            print("\n✅ User Intent Agent: PASSED")
-        else:
-            print("\n❌ User Intent Agent: FAILED - Goal not approved")
-            return
-    except Exception as e:
-        print(f"\n❌ User Intent Agent: ERROR - {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        return
+        result = construct_domain_graph(construction_plan)
+        print("\n[Neo4j Import Result]\n", json.dumps(result, indent=2, ensure_ascii=False))
+    except Exception as exc:
+        print(f"\n[Neo4j] Import attempted but failed: {exc}")
 
-    # Test 3: File Suggestion Agent
-    try:
-        state = await test_file_suggestion_agent(state)
-        if state and "approved_files" in state:
-            print("\n✅ File Suggestion Agent: PASSED")
-        else:
-            print("\n❌ File Suggestion Agent: FAILED - Files not approved")
-            return
-    except Exception as e:
-        print(f"\n❌ File Suggestion Agent: ERROR - {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        return
 
-    # Test 4: Schema Proposal Agent
-    try:
-        state = await test_schema_proposal_agent(state)
-        if state and "proposed_construction_plan" in state:
-            print("\n✅ Schema Proposal Agent: PASSED")
-        else:
-            print("\n❌ Schema Proposal Agent: FAILED - No proposal generated")
-            return
-    except Exception as e:
-        print(f"\n❌ Schema Proposal Agent: ERROR - {type(e).__name__}: {e}")
-        import traceback
-        traceback.print_exc()
-        return
+def main() -> None:
+    ensure_import_dir()
+    ctx = DummyToolContext()
+    ctx.state["pipeline_mode"] = "schema_first_separate"
 
-    print("\n" + "=" * 60)
-    print("All Tests Completed!")
-    print("=" * 60)
+    design_schema(ctx)
+    run_preprocessing(ctx)
+    plan = persist_and_plan(ctx)
+
+    # Only attempt DB import if credentials are present
+    maybe_build_graph(plan)
+
+    print("\n✅ Pipeline smoke test finished for data/序号.csv")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
