@@ -2,6 +2,8 @@ import { User, Bot, AlertCircle, Info, CheckCircle2, RefreshCw } from 'lucide-re
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { ChatMessage } from '../../types';
+import { useChatStore } from '../../stores/chatStore';
+import { ExtractionProgress } from './ExtractionProgress';
 
 interface MessageProps {
   message: ChatMessage;
@@ -9,12 +11,48 @@ interface MessageProps {
 
 export function Message({ message }: MessageProps) {
   const { role, content, agentName, isStreaming, isCriticFeedback } = message;
+  const {
+    phase,
+    extractionProgress,
+    extractionCurrent,
+    extractionTotal,
+    extractionItem,
+  } = useChatStore();
 
   if (role === 'system') {
+    const isPhaseMessage = content.startsWith('Phase:');
+
+    // Only show progress bar under the Phase message that matches the CURRENT phase
+    // Map phase names to their display text in the message
+    const phaseDisplayMap: Record<string, string> = {
+      'schema_design': 'Designing Schema',
+      'targeted_preprocessing': 'Extracting Data',
+      'schema_preprocess_coordinator': 'Designing Schema',  // Coordinator starts with schema design
+    };
+
+    const currentPhaseDisplay = phaseDisplayMap[phase] || '';
+    const messageMatchesCurrentPhase = isPhaseMessage && content.includes(currentPhaseDisplay);
+
+    const showProgress = messageMatchesCurrentPhase &&
+      (phase === 'schema_design' || phase === 'targeted_preprocessing' || phase === 'schema_preprocess_coordinator') &&
+      extractionTotal > 0;
+
     return (
-      <div className="flex items-center gap-2 py-2 px-3 rounded-lg bg-bg-secondary/50 text-text-secondary text-sm">
-        <Info size={16} />
-        <span>{content}</span>
+      <div>
+        <div className={`flex items-center gap-2 py-2 px-3 text-text-secondary text-sm ${showProgress ? 'rounded-t-lg' : 'rounded-lg'} bg-bg-secondary/50`}>
+          <Info size={16} />
+          <span>{content}</span>
+        </div>
+        {showProgress && (
+          <div className="bg-bg-secondary/30 rounded-b-lg px-3 pb-2">
+            <ExtractionProgress
+              progress={extractionProgress}
+              current={extractionCurrent}
+              total={extractionTotal}
+              item={extractionItem}
+            />
+          </div>
+        )}
       </div>
     );
   }

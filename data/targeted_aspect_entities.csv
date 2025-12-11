@@ -1,0 +1,15 @@
+aspect_name,name,source_column,source_file
+Aspect_0,personality_consumption,personality_consumption_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv
+Aspect_1,trend_consumption,trend_consumption_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv
+Aspect_2,fashion_consumption,fashion_consumption_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv
+Aspect_3,quality_consumption,quality_consumption_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv
+Aspect_4,appearance_design,appearance_design_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv
+Aspect_5,interior_design_quality,interior_design_quality_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv
+Aspect_6,smart_cabin,smart_cabin_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv
+Aspect_7,configuration_value,configuration_value_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv
+Aspect_8,overall_quality,overall_quality_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv
+Aspect_9,driving_safety,driving_safety_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv
+Aspect_10,riding_comfort,riding_comfort_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv
+Aspect_11,operation_convenience,operation_convenience_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv
+Aspect_12,service_experience,service_experience_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv
+Aspect_13,driving_comfort,driving_comfort_score,/Users/depblu/Documents/GitHub/Agentic_KG/data/序号_standardized_schema_cleaned.csv

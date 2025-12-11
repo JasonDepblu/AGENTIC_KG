@@ -33,6 +33,7 @@ from ..tools.targeted_preprocessing import (
     get_preprocessing_feedback,
     request_schema_revision,
 )
+from ..tools.common import set_progress_total
 
 
 # Targeted Preprocessing Agent Instructions
@@ -95,7 +96,14 @@ Provide a clear reason and list of suggested changes for the schema design agent
 PREPROCESSING_CHAIN_OF_THOUGHT = """
 ## WORKFLOW - Follow these steps:
 
-### Step 0: Clean Schema Columns (Do This First!)
+### Step 0: Set Progress Total (Do This First!)
+After reviewing the schema, call 'set_progress_total' to set expected operations:
+- Count nodes and relationships in schema
+- Estimate: (nodes × 2) + (relationships × 2) + 5 (for save/cleanup)
+- Example: 4 nodes + 6 relationships → set_progress_total(total=25, description="Extracting entities and relationships")
+- This enables accurate progress bar display in the UI
+
+### Step 0.5: Clean Schema Columns
 Before extracting any data, clean the columns mentioned in the schema:
 1. Call 'clean_columns_for_schema' to clean only relevant columns
 2. This automatically:
@@ -244,6 +252,9 @@ CRITIC_INSTRUCTION = f"""
 
 # Tool lists
 PREPROCESSING_TOOLS = [
+    # Progress tracking
+    set_progress_total,
+    # Context tools
     get_approved_files,
     sample_file,
     get_approved_target_schema,

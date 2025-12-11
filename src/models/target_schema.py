@@ -6,13 +6,20 @@ that guides the preprocessing stage.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 from enum import Enum
 import json
 
 
 class EntityType(str, Enum):
-    """Predefined entity types for knowledge graph nodes."""
+    """
+    Predefined entity types for knowledge graph nodes.
+
+    DEPRECATED: This enum is kept for backward compatibility.
+    New code should use DynamicEntityType or raw strings instead.
+    When USE_DYNAMIC_ENTITY_TYPES=True, entity types are dynamically
+    detected by LLM and registered in the EntityTypeRegistry.
+    """
     BRAND = "Brand"
     MODEL = "Model"
     STORE = "Store"
@@ -24,6 +31,169 @@ class EntityType(str, Enum):
     CUSTOM = "Custom"
 
 
+# Configuration flag for dynamic entity types
+USE_DYNAMIC_ENTITY_TYPES = True
+
+
+class EntityTypeRegistry:
+    """
+    Registry for dynamically discovered entity types.
+
+    This enables domain-agnostic entity type detection by allowing
+    LLM-detected types to be registered at runtime.
+    """
+    _instance = None
+    _types: Dict[str, Dict[str, Any]] = {}
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._types = {}
+            # Pre-register built-in types
+            for et in EntityType:
+                cls._types[et.value] = {
+                    "name": et.value,
+                    "source": "builtin",
+                    "description": f"Built-in {et.value} type",
+                }
+        return cls._instance
+
+    @classmethod
+    def register(
+        cls,
+        name: str,
+        description: str = "",
+        source: str = "llm_detected",
+        domain: str = "",
+        **metadata
+    ) -> str:
+        """
+        Register a new entity type.
+
+        Args:
+            name: Entity type name (e.g., "Patient", "Department")
+            description: Description of this entity type
+            source: Where this type was detected from
+            domain: Domain this type belongs to (e.g., "medical", "automotive")
+            **metadata: Additional metadata
+
+        Returns:
+            Registered entity type name
+        """
+        if cls._instance is None:
+            cls()
+
+        cls._types[name] = {
+            "name": name,
+            "description": description,
+            "source": source,
+            "domain": domain,
+            **metadata,
+        }
+        return name
+
+    @classmethod
+    def get(cls, name: str) -> Optional[Dict[str, Any]]:
+        """Get entity type info by name."""
+        if cls._instance is None:
+            cls()
+        return cls._types.get(name)
+
+    @classmethod
+    def exists(cls, name: str) -> bool:
+        """Check if entity type exists."""
+        if cls._instance is None:
+            cls()
+        return name in cls._types
+
+    @classmethod
+    def all_types(cls) -> List[str]:
+        """Get list of all registered entity type names."""
+        if cls._instance is None:
+            cls()
+        return list(cls._types.keys())
+
+    @classmethod
+    def get_by_domain(cls, domain: str) -> List[str]:
+        """Get entity types for a specific domain."""
+        if cls._instance is None:
+            cls()
+        return [
+            name for name, info in cls._types.items()
+            if info.get("domain") == domain
+        ]
+
+    @classmethod
+    def clear_dynamic(cls) -> int:
+        """Clear all dynamically registered types, keeping built-in ones."""
+        if cls._instance is None:
+            cls()
+        to_remove = [
+            name for name, info in cls._types.items()
+            if info.get("source") != "builtin"
+        ]
+        for name in to_remove:
+            del cls._types[name]
+        return len(to_remove)
+
+
+def register_entity_type(
+    name: str,
+    description: str = "",
+    domain: str = "",
+) -> str:
+    """
+    Convenience function to register a new entity type.
+
+    Use this when LLM detects a new entity type that should be added
+    to the schema.
+
+    Args:
+        name: Entity type name (PascalCase, e.g., "Patient", "Department")
+        description: Description of what this entity represents
+        domain: Domain this type belongs to
+
+    Returns:
+        Registered entity type name
+    """
+    return EntityTypeRegistry.register(
+        name=name,
+        description=description,
+        domain=domain,
+        source="llm_detected",
+    )
+
+
+def get_or_create_entity_type(name: str) -> Union[EntityType, str]:
+    """
+    Get an entity type by name, creating it dynamically if needed.
+
+    First tries to match built-in EntityType enum values.
+    If not found and USE_DYNAMIC_ENTITY_TYPES is True, registers as dynamic.
+    Otherwise returns EntityType.CUSTOM.
+
+    Args:
+        name: Entity type name
+
+    Returns:
+        EntityType enum or string for dynamic type
+    """
+    # Try built-in enum first
+    try:
+        return EntityType(name)
+    except ValueError:
+        pass
+
+    # Dynamic entity type handling
+    if USE_DYNAMIC_ENTITY_TYPES:
+        if not EntityTypeRegistry.exists(name):
+            EntityTypeRegistry.register(name, source="auto_created")
+        return name
+
+    # Fallback to CUSTOM
+    return EntityType.CUSTOM
+
+
 @dataclass
 class NodeDefinition:
     """
@@ -31,7 +201,7 @@ class NodeDefinition:
 
     Attributes:
         label: Node label in the graph (e.g., "Brand")
-        entity_type: Type category for the node
+        entity_type: Type category for the node (EntityType enum or string for dynamic types)
         unique_property: Property that uniquely identifies nodes (e.g., "brand_id")
         properties: List of property names for this node type
         extraction_hints: Hints for data extraction (column patterns, etc.)
@@ -39,28 +209,32 @@ class NodeDefinition:
     label: str
     unique_property: str
     properties: List[str] = field(default_factory=list)
-    entity_type: EntityType = EntityType.CUSTOM
+    entity_type: Union[EntityType, str] = EntityType.CUSTOM
     extraction_hints: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary representation."""
+        # Handle both EntityType enum and dynamic string types
+        if isinstance(self.entity_type, EntityType):
+            entity_type_value = self.entity_type.value
+        else:
+            entity_type_value = str(self.entity_type)
+
         return {
             "label": self.label,
             "unique_property": self.unique_property,
             "properties": self.properties,
-            "entity_type": self.entity_type.value if isinstance(self.entity_type, EntityType) else self.entity_type,
+            "entity_type": entity_type_value,
             "extraction_hints": self.extraction_hints,
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "NodeDefinition":
         """Create from dictionary."""
-        entity_type = data.get("entity_type", "Custom")
-        if isinstance(entity_type, str):
-            try:
-                entity_type = EntityType(entity_type)
-            except ValueError:
-                entity_type = EntityType.CUSTOM
+        entity_type_str = data.get("entity_type", "Custom")
+
+        # Use the smart entity type resolver
+        entity_type = get_or_create_entity_type(entity_type_str)
 
         return cls(
             label=data["label"],
@@ -69,6 +243,12 @@ class NodeDefinition:
             entity_type=entity_type,
             extraction_hints=data.get("extraction_hints", {}),
         )
+
+    def get_entity_type_name(self) -> str:
+        """Get the entity type name as a string."""
+        if isinstance(self.entity_type, EntityType):
+            return self.entity_type.value
+        return str(self.entity_type)
 
 
 @dataclass
@@ -258,6 +438,63 @@ class TargetSchema:
 
     def __str__(self) -> str:
         return self.get_summary()
+
+    def to_markdown(self) -> str:
+        """
+        Export schema to Markdown format for human-readable documentation.
+
+        Returns:
+            Markdown string representation of the schema
+        """
+        lines = [
+            f"# {self.name}",
+            "",
+        ]
+
+        if self.description:
+            lines.append(f"> {self.description}")
+            lines.append("")
+
+        lines.append("## Node Types")
+        lines.append("")
+
+        for label, node in self.nodes.items():
+            lines.append(f"### {label}")
+            lines.append(f"- **Unique Property**: `{node.unique_property}`")
+            if node.properties:
+                lines.append(f"- **Properties**: {', '.join(f'`{p}`' for p in node.properties)}")
+            entity_type_name = node.get_entity_type_name()
+            if entity_type_name and entity_type_name != "Custom":
+                lines.append(f"- **Entity Type**: {entity_type_name}")
+            if node.extraction_hints:
+                hints_summary = []
+                if "source_type" in node.extraction_hints:
+                    hints_summary.append(f"source_type={node.extraction_hints['source_type']}")
+                if "column_pattern" in node.extraction_hints:
+                    hints_summary.append(f"column_pattern=`{node.extraction_hints['column_pattern']}`")
+                if hints_summary:
+                    lines.append(f"- **Extraction Hints**: {', '.join(hints_summary)}")
+            lines.append("")
+
+        lines.append("## Relationship Types")
+        lines.append("")
+
+        for rel_type, rel in self.relationships.items():
+            lines.append(f"### {rel_type}")
+            lines.append(f"- **Pattern**: `({rel.from_node})-[{rel_type}]->({rel.to_node})`")
+            if rel.properties:
+                lines.append(f"- **Properties**: {', '.join(f'`{p}`' for p in rel.properties)}")
+            if rel.extraction_hints:
+                hints_summary = []
+                if "source_type" in rel.extraction_hints:
+                    hints_summary.append(f"source_type={rel.extraction_hints['source_type']}")
+                if "column_pattern" in rel.extraction_hints:
+                    hints_summary.append(f"column_pattern=`{rel.extraction_hints['column_pattern']}`")
+                if hints_summary:
+                    lines.append(f"- **Extraction Hints**: {', '.join(hints_summary)}")
+            lines.append("")
+
+        return "\n".join(lines)
 
 
 # State keys for tool context

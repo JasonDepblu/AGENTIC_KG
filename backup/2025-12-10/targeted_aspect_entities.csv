@@ -1,0 +1,2 @@
+aspect_name,name,source_column,source_file
+Aspect_0,driving_comfort,driving_comfort_score,序号_standardized_schema_cleaned.csv

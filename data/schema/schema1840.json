@@ -1,0 +1,381 @@
+{
+  "name": "Target Schema",
+  "description": "Knowledge graph schema designed from raw data",
+  "nodes": {
+    "Feature": {
+      "label": "Feature",
+      "unique_property": "feature_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "13、针对外观设计中的“车型整体”方面您觉得该车型优劣点的体验是?—优秀点|13、劣势点|20、针对内饰设计及质感中的“内饰设计风格与布局”方面您觉得该车型优劣点的体验是?—优秀点|20、劣势点|21、针对内饰设计及质感中的“用料及工艺”方面您觉得该车型优劣点的体验是?—优秀点|21、劣势点|31、针对针对智能座舱中的“语音助手”方面您觉得该车型优劣点的体验是?—优秀点|31、劣势点|59、针对乘坐舒适中的“座椅舒适性”方面您觉得该车型优劣点的体验是？—优秀点|59、劣势点|68、针对操作便利中的“储物空间”方面您觉得该车型优劣点的体验是？—优秀点|68、劣势点|77、针对服务体验中的“接待与专业性”方面您觉得该车型优劣点的体验是？—优秀点|77、劣势点",
+        "description": "产品的具体特性或功能"
+      }
+    },
+    "Component": {
+      "label": "Component",
+      "unique_property": "component_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "13、针对外观设计中的“车型整体”方面您觉得该车型优劣点的体验是?—优秀点|13、劣势点|20、针对内饰设计及质感中的“内饰设计风格与布局”方面您觉得该车型优劣点的体验是?—优秀点|20、劣势点|21、针对内饰设计及质感中的“用料及工艺”方面您觉得该车型优劣点的体验是?—优秀点|21、劣势点|31、针对针对智能座舱中的“语音助手”方面您觉得该车型优劣点的体验是?—优秀点|31、劣势点|59、针对乘坐舒适中的“座椅舒适性”方面您觉得该车型优劣点的体验是？—优秀点|59、劣势点|68、针对操作便利中的“储物空间”方面您觉得该车型优劣点的体验是？—优秀点|68、劣势点|77、针对服务体验中的“接待与专业性”方面您觉得该车型优劣点的体验是？—优秀点|77、劣势点",
+        "description": "构成产品的物理部件或子系统"
+      }
+    },
+    "Experience": {
+      "label": "Experience",
+      "unique_property": "experience_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "13、针对外观设计中的“车型整体”方面您觉得该车型优劣点的体验是?—优秀点|13、劣势点|20、针对内饰设计及质感中的“内饰设计风格与布局”方面您觉得该车型优劣点的体验是?—优秀点|20、劣势点|21、针对内饰设计及质感中的“用料及工艺”方面您觉得该车型优劣点的体验是?—优秀点|21、劣势点|31、针对针对智能座舱中的“语音助手”方面您觉得该车型优劣点的体验是?—优秀点|31、劣势点|59、针对乘坐舒适中的“座椅舒适性”方面您觉得该车型优劣点的体验是？—优秀点|59、劣势点|68、针对操作便利中的“储物空间”方面您觉得该车型优劣点的体验是？—优秀点|68、劣势点|77、针对服务体验中的“接待与专业性”方面您觉得该车型优劣点的体验是？—优秀点|77、劣势点",
+        "description": "用户在使用过程中感知到的整体感受或主观体验"
+      }
+    },
+    "Issue": {
+      "label": "Issue",
+      "unique_property": "issue_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "13、劣势点|20、劣势点|21、劣势点|31、劣势点|59、劣势点|68、劣势点|77、劣势点",
+        "description": "被指出的具体缺陷、不足或负面问题"
+      }
+    },
+    "Respondent": {
+      "label": "Respondent",
+      "unique_property": "respondent_id",
+      "properties": [
+        "age",
+        "gender",
+        "family_status",
+        "vehicle_ownership"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "entity_selection",
+        "column_pattern": "序号"
+      }
+    }
+  },
+  "relationships": {
+    "MENTIONED_FEATURE": {
+      "relationship_type": "MENTIONED_FEATURE",
+      "from_node": "Respondent",
+      "to_node": "Feature",
+      "properties": [
+        "sentiment",
+        "source_aspect"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "13、针对外观设计中的“车型整体”方面您觉得该车型优劣点的体验是?—优秀点|13、劣势点|20、针对内饰设计及质感中的“内饰设计风格与布局”方面您觉得该车型优劣点的体验是?—优秀点|20、劣势点|21、针对内饰设计及质感中的“用料及工艺”方面您觉得该车型优劣点的体验是?—优秀点|21、劣势点|31、针对针对智能座舱中的“语音助手”方面您觉得该车型优劣点的体验是?—优秀点|31、劣势点|59、针对乘坐舒适中的“座椅舒适性”方面您觉得该车型优劣点的体验是？—优秀点|59、劣势点|68、针对操作便利中的“储物空间”方面您觉得该车型优劣点的体验是？—优秀点|68、劣势点|77、针对服务体验中的“接待与专业性”方面您觉得该车型优劣点的体验是？—优秀点|77、劣势点",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "MENTIONED_COMPONENT": {
+      "relationship_type": "MENTIONED_COMPONENT",
+      "from_node": "Respondent",
+      "to_node": "Component",
+      "properties": [
+        "sentiment",
+        "source_aspect"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "13、劣势点|20、劣势点|21、劣势点|31、劣势点|59、劣势点|68、劣势点|77、劣势点",
+        "sentiment": "negative",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "MENTIONED_EXPERIENCE": {
+      "relationship_type": "MENTIONED_EXPERIENCE",
+      "from_node": "Respondent",
+      "to_node": "Experience",
+      "properties": [
+        "sentiment",
+        "source_aspect"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "13、劣势点|20、劣势点|21、劣势点|31、劣势点|59、劣势点|68、劣势点|77、劣势点",
+        "sentiment": "negative",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "MENTIONED_ISSUE": {
+      "relationship_type": "MENTIONED_ISSUE",
+      "from_node": "Respondent",
+      "to_node": "Issue",
+      "properties": [
+        "sentiment",
+        "source_aspect"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "13、劣势点|20、劣势点|21、劣势点|31、劣势点|59、劣势点|68、劣势点|77、劣势点",
+        "sentiment": "negative",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "HAS_ISSUE": {
+      "relationship_type": "HAS_ISSUE",
+      "from_node": "Feature",
+      "to_node": "Issue",
+      "properties": [
+        "severity",
+        "evidence_context"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "13、劣势点|20、劣势点|21、劣势点|31、劣势点|59、劣势点|68、劣势点|77、劣势点",
+        "sentiment": "negative",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "RELATES_TO_COMPONENT": {
+      "relationship_type": "RELATES_TO_COMPONENT",
+      "from_node": "Feature",
+      "to_node": "Component",
+      "properties": [
+        "position",
+        "material",
+        "visual_property"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "20、针对内饰设计及质感中的“内饰设计风格与布局”方面您觉得该车型优劣点的体验是?—优秀点|20、劣势点|21、针对内饰设计及质感中的“用料及工艺”方面您觉得该车型优劣点的体验是?—优秀点|21、劣势点|59、针对乘坐舒适中的“座椅舒适性”方面您觉得该车型优劣点的体验是？—优秀点|59、劣势点|68、针对操作便利中的“储物空间”方面您觉得该车型优劣点的体验是？—优秀点|68、劣势点",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "HAS_EXPERIENCE_WITH": {
+      "relationship_type": "HAS_EXPERIENCE_WITH",
+      "from_node": "Respondent",
+      "to_node": "Experience",
+      "properties": [
+        "sentiment",
+        "modality"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "21、针对内饰设计及质感中的“用料及工艺”方面您觉得该车型优劣点的体验是?—优秀点|21、劣势点",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "INFLUENCES_EXPERIENCE": {
+      "relationship_type": "INFLUENCES_EXPERIENCE",
+      "from_node": "Feature",
+      "to_node": "Experience",
+      "properties": [
+        "valence",
+        "intensity"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "21、劣势点",
+        "sentiment": "negative",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "EVALUATES_AS_POSITIVE": {
+      "relationship_type": "EVALUATES_AS_POSITIVE",
+      "from_node": "Experience",
+      "to_node": "Feature",
+      "properties": [
+        "sentiment_score",
+        "evidence_text"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "21、针对内饰设计及质感中的“用料及工艺”方面您觉得该车型优劣点的体验是?—优秀点",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "COMPOSED_OF": {
+      "relationship_type": "COMPOSED_OF",
+      "from_node": "Feature",
+      "to_node": "Component",
+      "properties": [
+        "proportion",
+        "material_type"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "21、劣势点",
+        "sentiment": "negative",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "EXPERIENCED_ISSUE": {
+      "relationship_type": "EXPERIENCED_ISSUE",
+      "from_node": "Experience",
+      "to_node": "Issue",
+      "properties": [
+        "severity",
+        "frequency"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "31、劣势点",
+        "sentiment": "negative",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "HAS_EXPERIENCE_OF": {
+      "relationship_type": "HAS_EXPERIENCE_OF",
+      "from_node": "Respondent",
+      "to_node": "Experience",
+      "properties": [
+        "sentiment",
+        "modality"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "31、针对针对智能座舱中的“语音助手”方面您觉得该车型优劣点的体验是?—优秀点",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "RELATES_TO": {
+      "relationship_type": "RELATES_TO",
+      "from_node": "Experience",
+      "to_node": "Feature",
+      "properties": [
+        "aspect_role"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "31、针对针对智能座舱中的“语音助手”方面您觉得该车型优劣点的体验是?—优秀点",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "HAS_COMPONENT": {
+      "relationship_type": "HAS_COMPONENT",
+      "from_node": "Feature",
+      "to_node": "Component",
+      "properties": [
+        "role_in_feature"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "59、针对乘坐舒适中的“座椅舒适性”方面您觉得该车型优劣点的体验是？—优秀点|59、劣势点",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "EXPERIENCED_AS": {
+      "relationship_type": "EXPERIENCED_AS",
+      "from_node": "Respondent",
+      "to_node": "Experience",
+      "properties": [
+        "intensity",
+        "context"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "59、针对乘坐舒适中的“座椅舒适性”方面您觉得该车型优劣点的体验是？—优秀点",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "RELATES_TO_ISSUE": {
+      "relationship_type": "RELATES_TO_ISSUE",
+      "from_node": "Experience",
+      "to_node": "Issue",
+      "properties": [
+        "mitigation_status"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "59、针对乘坐舒适中的“座椅舒适性”方面您觉得该车型优劣点的体验是？—优秀点",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "ENABLES_EXPERIENCE": {
+      "relationship_type": "ENABLES_EXPERIENCE",
+      "from_node": "Feature",
+      "to_node": "Experience",
+      "properties": [
+        "valence",
+        "aspect"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "68、针对操作便利中的“储物空间”方面您觉得该车型优劣点的体验是？—优秀点",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "IMPACTS_EXPERIENCE": {
+      "relationship_type": "IMPACTS_EXPERIENCE",
+      "from_node": "Feature",
+      "to_node": "Experience",
+      "properties": [
+        "experience_type",
+        "valence"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "59、劣势点",
+        "sentiment": "negative",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "REPORTED_EXPERIENCE": {
+      "relationship_type": "REPORTED_EXPERIENCE",
+      "from_node": "Respondent",
+      "to_node": "Experience",
+      "properties": [
+        "sentiment",
+        "context"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "77、劣势点",
+        "sentiment": "negative",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "IDENTIFIED_ISSUE": {
+      "relationship_type": "IDENTIFIED_ISSUE",
+      "from_node": "Respondent",
+      "to_node": "Issue",
+      "properties": [
+        "severity",
+        "evidence_text"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "77、劣势点",
+        "sentiment": "negative",
+        "respondent_column": "respondent_id"
+      }
+    }
+  }
+}

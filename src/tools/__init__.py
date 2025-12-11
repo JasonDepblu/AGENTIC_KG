@@ -117,6 +117,9 @@ from .schema_design import (
     update_relationship_extraction_hints,
     get_schema_revision_reason,
     standardize_column_names,
+    # LLM detection support
+    detect_entities_smart,
+    USE_LLM_DETECTION,
     SCHEMA_DESIGN_FEEDBACK_KEY,
     SCHEMA_REVISION_REASON_KEY,
     COLUMN_STANDARDIZATION_KEY,
@@ -126,6 +129,11 @@ from ..models.target_schema import (
     TARGET_SCHEMA_KEY,
     APPROVED_TARGET_SCHEMA_KEY,
     DETECTED_ENTITIES_KEY,
+    # Dynamic entity type support
+    EntityTypeRegistry,
+    register_entity_type,
+    get_or_create_entity_type,
+    USE_DYNAMIC_ENTITY_TYPES,
 )
 from .targeted_preprocessing import (
     get_schema_extraction_plan,
@@ -137,6 +145,9 @@ from .targeted_preprocessing import (
     generate_construction_rules,
     get_preprocessing_feedback,
     request_schema_revision,
+    clean_columns_for_schema,
+    # LLM rating conversion support
+    USE_LLM_RATING,
     TARGETED_EXTRACTION_RESULTS,
     TARGETED_ENTITY_MAPS,
     TARGETED_RELATIONSHIP_DATA,
@@ -145,6 +156,23 @@ from .targeted_preprocessing import (
     PREPROCESSING_FEEDBACK_KEY,
     NEEDS_SCHEMA_REVISION,
     SCHEMA_REVISION_REASON,
+    EXTRACTION_PROGRESS,
+)
+from .task_manager import (
+    init_task,
+    get_task_config,
+    get_task_id,
+    save_checkpoint,
+    load_checkpoint,
+    update_task_status,
+    list_tasks,
+    get_task_checkpoint,
+    delete_task,
+    get_raw_dir,
+    get_clean_dir,
+    get_extracted_dir,
+    TASK_ID_KEY,
+    TASK_CONFIG_KEY,
 )
 from .data_cleaning import (
     analyze_file_quality,
@@ -158,6 +186,13 @@ from .data_cleaning import (
     DATA_CLEANING_ANALYSIS_KEY,
     CLEANED_FILES_KEY,
     DATA_CLEANING_COMPLETE_KEY,
+)
+from .llm_detection import (
+    detect_entities_from_columns,
+    detect_text_feedback_columns,
+    convert_text_to_rating,
+    get_detected_entities,
+    infer_schema_from_detection,
 )
 from .kg_extraction import (
     # Schema tools
@@ -323,9 +358,17 @@ __all__ = [
     "update_relationship_extraction_hints",
     "get_schema_revision_reason",
     "standardize_column_names",
+    # LLM detection support
+    "detect_entities_smart",
+    "USE_LLM_DETECTION",
     "TARGET_SCHEMA_KEY",
     "APPROVED_TARGET_SCHEMA_KEY",
     "DETECTED_ENTITIES_KEY",
+    # Dynamic entity type support
+    "EntityTypeRegistry",
+    "register_entity_type",
+    "get_or_create_entity_type",
+    "USE_DYNAMIC_ENTITY_TYPES",
     "SCHEMA_DESIGN_FEEDBACK_KEY",
     "SCHEMA_REVISION_REASON_KEY",
     "COLUMN_STANDARDIZATION_KEY",
@@ -340,6 +383,9 @@ __all__ = [
     "generate_construction_rules",
     "get_preprocessing_feedback",
     "request_schema_revision",
+    "clean_columns_for_schema",
+    # LLM rating conversion support
+    "USE_LLM_RATING",
     "TARGETED_EXTRACTION_RESULTS",
     "TARGETED_ENTITY_MAPS",
     "TARGETED_RELATIONSHIP_DATA",
@@ -348,6 +394,22 @@ __all__ = [
     "PREPROCESSING_FEEDBACK_KEY",
     "NEEDS_SCHEMA_REVISION",
     "SCHEMA_REVISION_REASON",
+    "EXTRACTION_PROGRESS",
+    # Task Manager
+    "init_task",
+    "get_task_config",
+    "get_task_id",
+    "save_checkpoint",
+    "load_checkpoint",
+    "update_task_status",
+    "list_tasks",
+    "get_task_checkpoint",
+    "delete_task",
+    "get_raw_dir",
+    "get_clean_dir",
+    "get_extracted_dir",
+    "TASK_ID_KEY",
+    "TASK_CONFIG_KEY",
     # Data Cleaning
     "analyze_file_quality",
     "clean_file",

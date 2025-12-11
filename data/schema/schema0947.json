@@ -1,0 +1,343 @@
+{
+  "name": "Target Schema",
+  "description": "Knowledge graph schema designed from raw data",
+  "nodes": {
+    "Respondent": {
+      "label": "Respondent",
+      "unique_property": "respondent_id",
+      "properties": [
+        "age",
+        "gender",
+        "family_status",
+        "vehicle_ownership",
+        "personality_consumption_score",
+        "trend_consumption_score",
+        "fashion_consumption_score",
+        "quality_consumption_score",
+        "time_spent"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "entity_selection",
+        "column_pattern": "respondent_id"
+      }
+    },
+    "Brand": {
+      "label": "Brand",
+      "unique_property": "brand_name",
+      "properties": [],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "entity_selection",
+        "column_pattern": "brand"
+      }
+    },
+    "Model": {
+      "label": "Model",
+      "unique_property": "model_name",
+      "properties": [],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "entity_selection",
+        "column_pattern": "model"
+      }
+    },
+    "Store": {
+      "label": "Store",
+      "unique_property": "store_name",
+      "properties": [],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "entity_selection",
+        "column_pattern": "store"
+      }
+    },
+    "Aspect": {
+      "label": "Aspect",
+      "unique_property": "aspect_name",
+      "properties": [],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "column_header",
+        "column_pattern": "_score$",
+        "name_regex": "(.+)_score$"
+      }
+    },
+    "Feature": {
+      "label": "Feature",
+      "unique_property": "feature_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "appearance_design_overall_positive_feedback|appearance_design_overall_negative_feedback|appearance_design_front_side_positive_feedback|appearance_design_front_side_negative_feedback|appearance_design_paint_color_positive_feedback|appearance_design_paint_color_negative_feedback|appearance_design_other_positive_feedback|appearance_design_other_negative_feedback|interior_design_layout_positive_feedback|interior_design_layout_negative_feedback|interior_material_workmanship_positive_feedback|interior_material_workmanship_negative_feedback|interior_color_atmosphere_positive_feedback|interior_color_atmosphere_negative_feedback|interior_design_details_positive_feedback|interior_design_details_negative_feedback|interior_design_other_positive_feedback|interior_design_other_negative_feedback|smart_cabin_hardware_positive_feedback|smart_cabin_hardware_negative_feedback|smart_cabin_ui_positive_feedback|smart_cabin_ui_negative_feedback|smart_cabin_ecosystem_positive_feedback|smart_cabin_ecosystem_negative_feedback|smart_cabin_voice_assistant_positive_feedback|smart_cabin_voice_assistant_negative_feedback|smart_cabin_unique_features_positive_feedback|smart_cabin_unique_features_negative_feedback|smart_cabin_other_positive_feedback|smart_cabin_other_negative_feedback|configuration_comfort_features_positive_feedback|configuration_comfort_features_negative_feedback|configuration_tech_features_positive_feedback|configuration_tech_features_negative_feedback|configuration_other_positive_feedback|configuration_other_negative_feedback|body_gap_positive_feedback|body_gap_negative_feedback|material_color_consistency_positive_feedback|material_color_consistency_negative_feedback|closure_quality_positive_feedback|closure_quality_negative_feedback|button_quality_positive_feedback|button_quality_negative_feedback|overall_quality_other_positive_feedback|overall_quality_other_negative_feedback|safety_info_expression_positive_feedback|safety_info_expression_negative_feedback|passive_safety_positive_feedback|passive_safety_negative_feedback|active_safety_positive_feedback|active_safety_negative_feedback|driving_safety_other_positive_feedback|driving_safety_other_negative_feedback|seat_comfort_positive_feedback|seat_comfort_negative_feedback|space_positive_feedback|space_negative_feedback|comfort_features_positive_feedback|comfort_features_negative_feedback|quietness_positive_feedback|quietness_negative_feedback|air_conditioning_positive_feedback|air_conditioning_negative_feedback|riding_comfort_other_positive_feedback|riding_comfort_other_negative_feedback|storage_space_positive_feedback|storage_space_negative_feedback|convenience_design_positive_feedback|convenience_design_negative_feedback|button_operation_positive_feedback|button_operation_negative_feedback|charging_convenience_positive_feedback|charging_convenience_negative_feedback|operation_convenience_other_positive_feedback|operation_convenience_other_negative_feedback|store_experience_positive_feedback|store_experience_negative_feedback|reception_professionalism_positive_feedback|reception_professionalism_negative_feedback|demonstration_positive_feedback|demonstration_negative_feedback|service_experience_other_positive_feedback|service_experience_other_negative_feedback|chassis_tuning_positive_feedback|chassis_tuning_negative_feedback|view_positive_feedback|view_negative_feedback|driving_experience_positive_feedback|driving_experience_negative_feedback|noise_reduction_positive_feedback|noise_reduction_negative_feedback|driving_comfort_other_positive_feedback|driving_comfort_other_negative_feedback",
+        "description": "A specific characteristic or function of the vehicle that is mentioned in user feedback."
+      }
+    },
+    "Issue": {
+      "label": "Issue",
+      "unique_property": "issue_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "appearance_design_overall_negative_feedback|appearance_design_front_side_negative_feedback|appearance_design_paint_color_negative_feedback|appearance_design_other_negative_feedback|interior_design_layout_negative_feedback|interior_material_workmanship_negative_feedback|interior_color_atmosphere_negative_feedback|interior_design_details_negative_feedback|interior_design_other_negative_feedback|smart_cabin_hardware_negative_feedback|smart_cabin_ui_negative_feedback|smart_cabin_ecosystem_negative_feedback|smart_cabin_voice_assistant_negative_feedback|smart_cabin_unique_features_negative_feedback|smart_cabin_other_negative_feedback|configuration_comfort_features_negative_feedback|configuration_tech_features_negative_feedback|configuration_other_negative_feedback|body_gap_negative_feedback|material_color_consistency_negative_feedback|closure_quality_negative_feedback|button_quality_negative_feedback|overall_quality_other_negative_feedback|safety_info_expression_negative_feedback|passive_safety_negative_feedback|active_safety_negative_feedback|driving_safety_other_negative_feedback|seat_comfort_negative_feedback|space_negative_feedback|comfort_features_negative_feedback|quietness_negative_feedback|air_conditioning_negative_feedback|riding_comfort_other_negative_feedback|storage_space_negative_feedback|convenience_design_negative_feedback|button_operation_negative_feedback|charging_convenience_negative_feedback|operation_convenience_other_negative_feedback|store_experience_negative_feedback|reception_professionalism_negative_feedback|demonstration_negative_feedback|service_experience_other_negative_feedback|chassis_tuning_negative_feedback|view_negative_feedback|driving_experience_negative_feedback|noise_reduction_negative_feedback|driving_comfort_other_negative_feedback",
+        "description": "A specific problem or defect reported by users in their feedback."
+      }
+    },
+    "Component": {
+      "label": "Component",
+      "unique_property": "component_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "appearance_design_overall_positive_feedback|appearance_design_overall_negative_feedback|appearance_design_front_side_positive_feedback|appearance_design_front_side_negative_feedback|appearance_design_paint_color_positive_feedback|appearance_design_paint_color_negative_feedback|appearance_design_other_positive_feedback|appearance_design_other_negative_feedback|interior_design_layout_positive_feedback|interior_design_layout_negative_feedback|interior_material_workmanship_positive_feedback|interior_material_workmanship_negative_feedback|interior_color_atmosphere_positive_feedback|interior_color_atmosphere_negative_feedback|interior_design_details_positive_feedback|interior_design_details_negative_feedback|interior_design_other_positive_feedback|interior_design_other_negative_feedback|smart_cabin_hardware_positive_feedback|smart_cabin_hardware_negative_feedback|smart_cabin_ui_positive_feedback|smart_cabin_ui_negative_feedback|smart_cabin_ecosystem_positive_feedback|smart_cabin_ecosystem_negative_feedback|smart_cabin_voice_assistant_positive_feedback|smart_cabin_voice_assistant_negative_feedback|smart_cabin_unique_features_positive_feedback|smart_cabin_unique_features_negative_feedback|smart_cabin_other_positive_feedback|smart_cabin_other_negative_feedback|configuration_comfort_features_positive_feedback|configuration_comfort_features_negative_feedback|configuration_tech_features_positive_feedback|configuration_tech_features_negative_feedback|configuration_other_positive_feedback|configuration_other_negative_feedback|body_gap_positive_feedback|body_gap_negative_feedback|material_color_consistency_positive_feedback|material_color_consistency_negative_feedback|closure_quality_positive_feedback|closure_quality_negative_feedback|button_quality_positive_feedback|button_quality_negative_feedback|overall_quality_other_positive_feedback|overall_quality_other_negative_feedback|safety_info_expression_positive_feedback|safety_info_expression_negative_feedback|passive_safety_positive_feedback|passive_safety_negative_feedback|active_safety_positive_feedback|active_safety_negative_feedback|driving_safety_other_positive_feedback|driving_safety_other_negative_feedback|seat_comfort_positive_feedback|seat_comfort_negative_feedback|space_positive_feedback|space_negative_feedback|comfort_features_positive_feedback|comfort_features_negative_feedback|quietness_positive_feedback|quietness_negative_feedback|air_conditioning_positive_feedback|air_conditioning_negative_feedback|riding_comfort_other_positive_feedback|riding_comfort_other_negative_feedback|storage_space_positive_feedback|storage_space_negative_feedback|convenience_design_positive_feedback|convenience_design_negative_feedback|button_operation_positive_feedback|button_operation_negative_feedback|charging_convenience_positive_feedback|charging_convenience_negative_feedback|operation_convenience_other_positive_feedback|operation_convenience_other_negative_feedback|store_experience_positive_feedback|store_experience_negative_feedback|reception_professionalism_positive_feedback|reception_professionalism_negative_feedback|demonstration_positive_feedback|demonstration_negative_feedback|service_experience_other_positive_feedback|service_experience_other_negative_feedback|chassis_tuning_positive_feedback|chassis_tuning_negative_feedback|view_positive_feedback|view_negative_feedback|driving_experience_positive_feedback|driving_experience_negative_feedback|noise_reduction_positive_feedback|noise_reduction_negative_feedback|driving_comfort_other_positive_feedback|driving_comfort_other_negative_feedback",
+        "description": "A physical part or subsystem of the vehicle that is mentioned in user feedback."
+      }
+    },
+    "Experience": {
+      "label": "Experience",
+      "unique_property": "experience_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "appearance_design_overall_positive_feedback|appearance_design_overall_negative_feedback|appearance_design_front_side_positive_feedback|appearance_design_front_side_negative_feedback|appearance_design_paint_color_positive_feedback|appearance_design_paint_color_negative_feedback|appearance_design_other_positive_feedback|appearance_design_other_negative_feedback|interior_design_layout_positive_feedback|interior_design_layout_negative_feedback|interior_material_workmanship_positive_feedback|interior_material_workmanship_negative_feedback|interior_color_atmosphere_positive_feedback|interior_color_atmosphere_negative_feedback|interior_design_details_positive_feedback|interior_design_details_negative_feedback|interior_design_other_positive_feedback|interior_design_other_negative_feedback|smart_cabin_hardware_positive_feedback|smart_cabin_hardware_negative_feedback|smart_cabin_ui_positive_feedback|smart_cabin_ui_negative_feedback|smart_cabin_ecosystem_positive_feedback|smart_cabin_ecosystem_negative_feedback|smart_cabin_voice_assistant_positive_feedback|smart_cabin_voice_assistant_negative_feedback|smart_cabin_unique_features_positive_feedback|smart_cabin_unique_features_negative_feedback|smart_cabin_other_positive_feedback|smart_cabin_other_negative_feedback|configuration_comfort_features_positive_feedback|configuration_comfort_features_negative_feedback|configuration_tech_features_positive_feedback|configuration_tech_features_negative_feedback|configuration_other_positive_feedback|configuration_other_negative_feedback|body_gap_positive_feedback|body_gap_negative_feedback|material_color_consistency_positive_feedback|material_color_consistency_negative_feedback|closure_quality_positive_feedback|closure_quality_negative_feedback|button_quality_positive_feedback|button_quality_negative_feedback|overall_quality_other_positive_feedback|overall_quality_other_negative_feedback|safety_info_expression_positive_feedback|safety_info_expression_negative_feedback|passive_safety_positive_feedback|passive_safety_negative_feedback|active_safety_positive_feedback|active_safety_negative_feedback|driving_safety_other_positive_feedback|driving_safety_other_negative_feedback|seat_comfort_positive_feedback|seat_comfort_negative_feedback|space_positive_feedback|space_negative_feedback|comfort_features_positive_feedback|comfort_features_negative_feedback|quietness_positive_feedback|quietness_negative_feedback|air_conditioning_positive_feedback|air_conditioning_negative_feedback|riding_comfort_other_positive_feedback|riding_comfort_other_negative_feedback|storage_space_positive_feedback|storage_space_negative_feedback|convenience_design_positive_feedback|convenience_design_negative_feedback|button_operation_positive_feedback|button_operation_negative_feedback|charging_convenience_positive_feedback|charging_convenience_negative_feedback|operation_convenience_other_positive_feedback|operation_convenience_other_negative_feedback|store_experience_positive_feedback|store_experience_negative_feedback|reception_professionalism_positive_feedback|reception_professionalism_negative_feedback|demonstration_positive_feedback|demonstration_negative_feedback|service_experience_other_positive_feedback|service_experience_other_negative_feedback|chassis_tuning_positive_feedback|chassis_tuning_negative_feedback|view_positive_feedback|view_negative_feedback|driving_experience_positive_feedback|driving_experience_negative_feedback|noise_reduction_positive_feedback|noise_reduction_negative_feedback|driving_comfort_other_positive_feedback|driving_comfort_other_negative_feedback",
+        "description": "A subjective feeling or overall perception reported by users in their feedback."
+      }
+    },
+    "InnovationInsight": {
+      "label": "InnovationInsight",
+      "unique_property": "innovationinsight_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "innovation_insight",
+        "description": "A unique insight about innovative design or feature that could inspire future vehicle development."
+      }
+    },
+    "CostControlInsight": {
+      "label": "CostControlInsight",
+      "unique_property": "costcontrolinsight_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "cost_control_insight",
+        "description": "A unique insight about cost-effective design or manufacturing that could inform future vehicle development."
+      }
+    },
+    "UserGroupExperience": {
+      "label": "UserGroupExperience",
+      "unique_property": "usergroupexperience_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "brand_user_group_experience",
+        "description": "A unique insight about the target user demographic and their experience with the brand."
+      }
+    }
+  },
+  "relationships": {
+    "MENTIONED_FEATURE": {
+      "relationship_type": "MENTIONED_FEATURE",
+      "from_node": "Respondent",
+      "to_node": "Feature",
+      "properties": [
+        "sentiment",
+        "source_aspect"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "appearance_design_overall_positive_feedback|appearance_design_overall_negative_feedback|appearance_design_front_side_positive_feedback|appearance_design_front_side_negative_feedback|appearance_design_paint_color_positive_feedback|appearance_design_paint_color_negative_feedback|appearance_design_other_positive_feedback|appearance_design_other_negative_feedback|interior_design_layout_positive_feedback|interior_design_layout_negative_feedback|interior_material_workmanship_positive_feedback|interior_material_workmanship_negative_feedback|interior_color_atmosphere_positive_feedback|interior_color_atmosphere_negative_feedback|interior_design_details_positive_feedback|interior_design_details_negative_feedback|interior_design_other_positive_feedback|interior_design_other_negative_feedback|smart_cabin_hardware_positive_feedback|smart_cabin_hardware_negative_feedback|smart_cabin_ui_positive_feedback|smart_cabin_ui_negative_feedback|smart_cabin_ecosystem_positive_feedback|smart_cabin_ecosystem_negative_feedback|smart_cabin_voice_assistant_positive_feedback|smart_cabin_voice_assistant_negative_feedback|smart_cabin_unique_features_positive_feedback|smart_cabin_unique_features_negative_feedback|smart_cabin_other_positive_feedback|smart_cabin_other_negative_feedback|configuration_comfort_features_positive_feedback|configuration_comfort_features_negative_feedback|configuration_tech_features_positive_feedback|configuration_tech_features_negative_feedback|configuration_other_positive_feedback|configuration_other_negative_feedback|body_gap_positive_feedback|body_gap_negative_feedback|material_color_consistency_positive_feedback|material_color_consistency_negative_feedback|closure_quality_positive_feedback|closure_quality_negative_feedback|button_quality_positive_feedback|button_quality_negative_feedback|overall_quality_other_positive_feedback|overall_quality_other_negative_feedback|safety_info_expression_positive_feedback|safety_info_expression_negative_feedback|passive_safety_positive_feedback|passive_safety_negative_feedback|active_safety_positive_feedback|active_safety_negative_feedback|driving_safety_other_positive_feedback|driving_safety_other_negative_feedback|seat_comfort_positive_feedback|seat_comfort_negative_feedback|space_positive_feedback|space_negative_feedback|comfort_features_positive_feedback|comfort_features_negative_feedback|quietness_positive_feedback|quietness_negative_feedback|air_conditioning_positive_feedback|air_conditioning_negative_feedback|riding_comfort_other_positive_feedback|riding_comfort_other_negative_feedback|storage_space_positive_feedback|storage_space_negative_feedback|convenience_design_positive_feedback|convenience_design_negative_feedback|button_operation_positive_feedback|button_operation_negative_feedback|charging_convenience_positive_feedback|charging_convenience_negative_feedback|operation_convenience_other_positive_feedback|operation_convenience_other_negative_feedback|store_experience_positive_feedback|store_experience_negative_feedback|reception_professionalism_positive_feedback|reception_professionalism_negative_feedback|demonstration_positive_feedback|demonstration_negative_feedback|service_experience_other_positive_feedback|service_experience_other_negative_feedback|chassis_tuning_positive_feedback|chassis_tuning_negative_feedback|view_positive_feedback|view_negative_feedback|driving_experience_positive_feedback|driving_experience_negative_feedback|noise_reduction_positive_feedback|noise_reduction_negative_feedback|driving_comfort_other_positive_feedback|driving_comfort_other_negative_feedback",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "HAS_COMPONENT": {
+      "relationship_type": "HAS_COMPONENT",
+      "from_node": "Feature",
+      "to_node": "Component",
+      "properties": [
+        "role_in_feature"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "appearance_design_overall_positive_feedback|appearance_design_overall_negative_feedback|appearance_design_front_side_positive_feedback|appearance_design_front_side_negative_feedback|appearance_design_paint_color_positive_feedback|appearance_design_paint_color_negative_feedback|appearance_design_other_positive_feedback|appearance_design_other_negative_feedback|interior_design_layout_positive_feedback|interior_design_layout_negative_feedback|interior_material_workmanship_positive_feedback|interior_material_workmanship_negative_feedback|interior_color_atmosphere_positive_feedback|interior_color_atmosphere_negative_feedback|interior_design_details_positive_feedback|interior_design_details_negative_feedback|interior_design_other_positive_feedback|interior_design_other_negative_feedback|smart_cabin_hardware_positive_feedback|smart_cabin_hardware_negative_feedback|smart_cabin_ui_positive_feedback|smart_cabin_ui_negative_feedback|smart_cabin_ecosystem_positive_feedback|smart_cabin_ecosystem_negative_feedback|smart_cabin_voice_assistant_positive_feedback|smart_cabin_voice_assistant_negative_feedback|smart_cabin_unique_features_positive_feedback|smart_cabin_unique_features_negative_feedback|smart_cabin_other_positive_feedback|smart_cabin_other_negative_feedback|configuration_comfort_features_positive_feedback|configuration_comfort_features_negative_feedback|configuration_tech_features_positive_feedback|configuration_tech_features_negative_feedback|configuration_other_positive_feedback|configuration_other_negative_feedback|body_gap_positive_feedback|body_gap_negative_feedback|material_color_consistency_positive_feedback|material_color_consistency_negative_feedback|closure_quality_positive_feedback|closure_quality_negative_feedback|button_quality_positive_feedback|button_quality_negative_feedback|overall_quality_other_positive_feedback|overall_quality_other_negative_feedback|safety_info_expression_positive_feedback|safety_info_expression_negative_feedback|passive_safety_positive_feedback|passive_safety_negative_feedback|active_safety_positive_feedback|active_safety_negative_feedback|driving_safety_other_positive_feedback|driving_safety_other_negative_feedback|seat_comfort_positive_feedback|seat_comfort_negative_feedback|space_positive_feedback|space_negative_feedback|comfort_features_positive_feedback|comfort_features_negative_feedback|quietness_positive_feedback|quietness_negative_feedback|air_conditioning_positive_feedback|air_conditioning_negative_feedback|riding_comfort_other_positive_feedback|riding_comfort_other_negative_feedback|storage_space_positive_feedback|storage_space_negative_feedback|convenience_design_positive_feedback|convenience_design_negative_feedback|button_operation_positive_feedback|button_operation_negative_feedback|charging_convenience_positive_feedback|charging_convenience_negative_feedback|operation_convenience_other_positive_feedback|operation_convenience_other_negative_feedback|store_experience_positive_feedback|store_experience_negative_feedback|reception_professionalism_positive_feedback|reception_professionalism_negative_feedback|demonstration_positive_feedback|demonstration_negative_feedback|service_experience_other_positive_feedback|service_experience_other_negative_feedback|chassis_tuning_positive_feedback|chassis_tuning_negative_feedback|view_positive_feedback|view_negative_feedback|driving_experience_positive_feedback|driving_experience_negative_feedback|noise_reduction_positive_feedback|noise_reduction_negative_feedback|driving_comfort_other_positive_feedback|driving_comfort_other_negative_feedback",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "ENHANCES_EXPERIENCE": {
+      "relationship_type": "ENHANCES_EXPERIENCE",
+      "from_node": "Feature",
+      "to_node": "Experience",
+      "properties": [
+        "intensity",
+        "valence"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "appearance_design_overall_positive_feedback|appearance_design_overall_negative_feedback|appearance_design_front_side_positive_feedback|appearance_design_front_side_negative_feedback|appearance_design_paint_color_positive_feedback|appearance_design_paint_color_negative_feedback|appearance_design_other_positive_feedback|appearance_design_other_negative_feedback|interior_design_layout_positive_feedback|interior_design_layout_negative_feedback|interior_material_workmanship_positive_feedback|interior_material_workmanship_negative_feedback|interior_color_atmosphere_positive_feedback|interior_color_atmosphere_negative_feedback|interior_design_details_positive_feedback|interior_design_details_negative_feedback|interior_design_other_positive_feedback|interior_design_other_negative_feedback|smart_cabin_hardware_positive_feedback|smart_cabin_hardware_negative_feedback|smart_cabin_ui_positive_feedback|smart_cabin_ui_negative_feedback|smart_cabin_ecosystem_positive_feedback|smart_cabin_ecosystem_negative_feedback|smart_cabin_voice_assistant_positive_feedback|smart_cabin_voice_assistant_negative_feedback|smart_cabin_unique_features_positive_feedback|smart_cabin_unique_features_negative_feedback|smart_cabin_other_positive_feedback|smart_cabin_other_negative_feedback|configuration_comfort_features_positive_feedback|configuration_comfort_features_negative_feedback|configuration_tech_features_positive_feedback|configuration_tech_features_negative_feedback|configuration_other_positive_feedback|configuration_other_negative_feedback|body_gap_positive_feedback|body_gap_negative_feedback|material_color_consistency_positive_feedback|material_color_consistency_negative_feedback|closure_quality_positive_feedback|closure_quality_negative_feedback|button_quality_positive_feedback|button_quality_negative_feedback|overall_quality_other_positive_feedback|overall_quality_other_negative_feedback|safety_info_expression_positive_feedback|safety_info_expression_negative_feedback|passive_safety_positive_feedback|passive_safety_negative_feedback|active_safety_positive_feedback|active_safety_negative_feedback|driving_safety_other_positive_feedback|driving_safety_other_negative_feedback|seat_comfort_positive_feedback|seat_comfort_negative_feedback|space_positive_feedback|space_negative_feedback|comfort_features_positive_feedback|comfort_features_negative_feedback|quietness_positive_feedback|quietness_negative_feedback|air_conditioning_positive_feedback|air_conditioning_negative_feedback|riding_comfort_other_positive_feedback|riding_comfort_other_negative_feedback|storage_space_positive_feedback|storage_space_negative_feedback|convenience_design_positive_feedback|convenience_design_negative_feedback|button_operation_positive_feedback|button_operation_negative_feedback|charging_convenience_positive_feedback|charging_convenience_negative_feedback|operation_convenience_other_positive_feedback|operation_convenience_other_negative_feedback|store_experience_positive_feedback|store_experience_negative_feedback|reception_professionalism_positive_feedback|reception_professionalism_negative_feedback|demonstration_positive_feedback|demonstration_negative_feedback|service_experience_other_positive_feedback|service_experience_other_negative_feedback|chassis_tuning_positive_feedback|chassis_tuning_negative_feedback|view_positive_feedback|view_negative_feedback|driving_experience_positive_feedback|driving_experience_negative_feedback|noise_reduction_positive_feedback|noise_reduction_negative_feedback|driving_comfort_other_positive_feedback|driving_comfort_other_negative_feedback",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "TRIGGERS_NEGATIVE_EXPERIENCE": {
+      "relationship_type": "TRIGGERS_NEGATIVE_EXPERIENCE",
+      "from_node": "Issue",
+      "to_node": "Experience",
+      "properties": [
+        "valence",
+        "intensity"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "appearance_design_overall_positive_feedback|appearance_design_overall_negative_feedback|appearance_design_front_side_positive_feedback|appearance_design_front_side_negative_feedback|appearance_design_paint_color_positive_feedback|appearance_design_paint_color_negative_feedback|appearance_design_other_positive_feedback|appearance_design_other_negative_feedback|interior_design_layout_positive_feedback|interior_design_layout_negative_feedback|interior_material_workmanship_positive_feedback|interior_material_workmanship_negative_feedback|interior_color_atmosphere_positive_feedback|interior_color_atmosphere_negative_feedback|interior_design_details_positive_feedback|interior_design_details_negative_feedback|interior_design_other_positive_feedback|interior_design_other_negative_feedback|smart_cabin_hardware_positive_feedback|smart_cabin_hardware_negative_feedback|smart_cabin_ui_positive_feedback|smart_cabin_ui_negative_feedback|smart_cabin_ecosystem_positive_feedback|smart_cabin_ecosystem_negative_feedback|smart_cabin_voice_assistant_positive_feedback|smart_cabin_voice_assistant_negative_feedback|smart_cabin_unique_features_positive_feedback|smart_cabin_unique_features_negative_feedback|smart_cabin_other_positive_feedback|smart_cabin_other_negative_feedback|configuration_comfort_features_positive_feedback|configuration_comfort_features_negative_feedback|configuration_tech_features_positive_feedback|configuration_tech_features_negative_feedback|configuration_other_positive_feedback|configuration_other_negative_feedback|body_gap_positive_feedback|body_gap_negative_feedback|material_color_consistency_positive_feedback|material_color_consistency_negative_feedback|closure_quality_positive_feedback|closure_quality_negative_feedback|button_quality_positive_feedback|button_quality_negative_feedback|overall_quality_other_positive_feedback|overall_quality_other_negative_feedback|safety_info_expression_positive_feedback|safety_info_expression_negative_feedback|passive_safety_positive_feedback|passive_safety_negative_feedback|active_safety_positive_feedback|active_safety_negative_feedback|driving_safety_other_positive_feedback|driving_safety_other_negative_feedback|seat_comfort_positive_feedback|seat_comfort_negative_feedback|space_positive_feedback|space_negative_feedback|comfort_features_positive_feedback|comfort_features_negative_feedback|quietness_positive_feedback|quietness_negative_feedback|air_conditioning_positive_feedback|air_conditioning_negative_feedback|riding_comfort_other_positive_feedback|riding_comfort_other_negative_feedback|storage_space_positive_feedback|storage_space_negative_feedback|convenience_design_positive_feedback|convenience_design_negative_feedback|button_operation_positive_feedback|button_operation_negative_feedback|charging_convenience_positive_feedback|charging_convenience_negative_feedback|operation_convenience_other_positive_feedback|operation_convenience_other_negative_feedback|store_experience_positive_feedback|store_experience_negative_feedback|reception_professionalism_positive_feedback|reception_professionalism_negative_feedback|demonstration_positive_feedback|demonstration_negative_feedback|service_experience_other_positive_feedback|service_experience_other_negative_feedback|chassis_tuning_positive_feedback|chassis_tuning_negative_feedback|view_positive_feedback|view_negative_feedback|driving_experience_positive_feedback|driving_experience_negative_feedback|noise_reduction_positive_feedback|noise_reduction_negative_feedback|driving_comfort_other_positive_feedback|driving_comfort_other_negative_feedback",
+        "sentiment": "negative",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "RELATES_TO_COMPONENT": {
+      "relationship_type": "RELATES_TO_COMPONENT",
+      "from_node": "Feature",
+      "to_node": "Component",
+      "properties": [
+        "abstraction_level"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "appearance_design_overall_positive_feedback|appearance_design_overall_negative_feedback|appearance_design_front_side_positive_feedback|appearance_design_front_side_negative_feedback|appearance_design_paint_color_positive_feedback|appearance_design_paint_color_negative_feedback|appearance_design_other_positive_feedback|appearance_design_other_negative_feedback|interior_design_layout_positive_feedback|interior_design_layout_negative_feedback|interior_material_workmanship_positive_feedback|interior_material_workmanship_negative_feedback|interior_color_atmosphere_positive_feedback|interior_color_atmosphere_negative_feedback|interior_design_details_positive_feedback|interior_design_details_negative_feedback|interior_design_other_positive_feedback|interior_design_other_negative_feedback|smart_cabin_hardware_positive_feedback|smart_cabin_hardware_negative_feedback|smart_cabin_ui_positive_feedback|smart_cabin_ui_negative_feedback|smart_cabin_ecosystem_positive_feedback|smart_cabin_ecosystem_negative_feedback|smart_cabin_voice_assistant_positive_feedback|smart_cabin_voice_assistant_negative_feedback|smart_cabin_unique_features_positive_feedback|smart_cabin_unique_features_negative_feedback|smart_cabin_other_positive_feedback|smart_cabin_other_negative_feedback|configuration_comfort_features_positive_feedback|configuration_comfort_features_negative_feedback|configuration_tech_features_positive_feedback|configuration_tech_features_negative_feedback|configuration_other_positive_feedback|configuration_other_negative_feedback|body_gap_positive_feedback|body_gap_negative_feedback|material_color_consistency_positive_feedback|material_color_consistency_negative_feedback|closure_quality_positive_feedback|closure_quality_negative_feedback|button_quality_positive_feedback|button_quality_negative_feedback|overall_quality_other_positive_feedback|overall_quality_other_negative_feedback|safety_info_expression_positive_feedback|safety_info_expression_negative_feedback|passive_safety_positive_feedback|passive_safety_negative_feedback|active_safety_positive_feedback|active_safety_negative_feedback|driving_safety_other_positive_feedback|driving_safety_other_negative_feedback|seat_comfort_positive_feedback|seat_comfort_negative_feedback|space_positive_feedback|space_negative_feedback|comfort_features_positive_feedback|comfort_features_negative_feedback|quietness_positive_feedback|quietness_negative_feedback|air_conditioning_positive_feedback|air_conditioning_negative_feedback|riding_comfort_other_positive_feedback|riding_comfort_other_negative_feedback|storage_space_positive_feedback|storage_space_negative_feedback|convenience_design_positive_feedback|convenience_design_negative_feedback|button_operation_positive_feedback|button_operation_negative_feedback|charging_convenience_positive_feedback|charging_convenience_negative_feedback|operation_convenience_other_positive_feedback|operation_convenience_other_negative_feedback|store_experience_positive_feedback|store_experience_negative_feedback|reception_professionalism_positive_feedback|reception_professionalism_negative_feedback|demonstration_positive_feedback|demonstration_negative_feedback|service_experience_other_positive_feedback|service_experience_other_negative_feedback|chassis_tuning_positive_feedback|chassis_tuning_negative_feedback|view_positive_feedback|view_negative_feedback|driving_experience_positive_feedback|driving_experience_negative_feedback|noise_reduction_positive_feedback|noise_reduction_negative_feedback|driving_comfort_other_positive_feedback|driving_comfort_other_negative_feedback",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "RATES": {
+      "relationship_type": "RATES",
+      "from_node": "Respondent",
+      "to_node": "Aspect",
+      "properties": [
+        "score"
+      ],
+      "extraction_hints": {
+        "source_type": "rating_column",
+        "column_pattern": "_score$",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "EVALUATED_BRAND": {
+      "relationship_type": "EVALUATED_BRAND",
+      "from_node": "Respondent",
+      "to_node": "Brand",
+      "properties": [],
+      "extraction_hints": {
+        "source_type": "entity_reference",
+        "column_pattern": "brand",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "EVALUATED_MODEL": {
+      "relationship_type": "EVALUATED_MODEL",
+      "from_node": "Respondent",
+      "to_node": "Model",
+      "properties": [],
+      "extraction_hints": {
+        "source_type": "entity_reference",
+        "column_pattern": "model",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "VISITED_STORE": {
+      "relationship_type": "VISITED_STORE",
+      "from_node": "Respondent",
+      "to_node": "Store",
+      "properties": [],
+      "extraction_hints": {
+        "source_type": "entity_reference",
+        "column_pattern": "store",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "BELONGS_TO": {
+      "relationship_type": "BELONGS_TO",
+      "from_node": "Model",
+      "to_node": "Brand",
+      "properties": [],
+      "extraction_hints": {
+        "source_type": "foreign_key",
+        "from_column": "model",
+        "to_column": "brand"
+      }
+    },
+    "HAS_INNOVATION_INSIGHT": {
+      "relationship_type": "HAS_INNOVATION_INSIGHT",
+      "from_node": "Brand",
+      "to_node": "InnovationInsight",
+      "properties": [
+        "insight_text"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "innovation_insight",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "HAS_COST_CONTROL_INSIGHT": {
+      "relationship_type": "HAS_COST_CONTROL_INSIGHT",
+      "from_node": "Brand",
+      "to_node": "CostControlInsight",
+      "properties": [
+        "insight_text"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "cost_control_insight",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "BRAND_USER_GROUP_EXPERIENCE": {
+      "relationship_type": "BRAND_USER_GROUP_EXPERIENCE",
+      "from_node": "Brand",
+      "to_node": "UserGroupExperience",
+      "properties": [
+        "experience_text"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "brand_user_group_experience",
+        "respondent_column": "respondent_id"
+      }
+    }
+  }
+}

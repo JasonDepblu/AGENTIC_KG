@@ -74,6 +74,15 @@ from .structured_data_coordinator import (
     create_data_cleaning_phase,
     create_schema_and_preprocessing_loop,
 )
+from .entity_type_agent import (
+    create_entity_type_generator_agent,
+    create_entity_type_critic_agent,
+    create_entity_type_detection_loop,
+    EntityTypeStopChecker,
+    ENTITY_TYPE_DETECTION_COMPLETE,
+    DETECTED_DOMAIN,
+    PROPOSED_ENTITY_TYPES,
+)
 
 __all__ = [
     # Base
@@ -146,4 +155,12 @@ __all__ = [
     "create_schema_only_coordinator",
     "create_data_cleaning_phase",
     "create_schema_and_preprocessing_loop",
+    # Entity Type Detection Agent (LLM-driven)
+    "create_entity_type_generator_agent",
+    "create_entity_type_critic_agent",
+    "create_entity_type_detection_loop",
+    "EntityTypeStopChecker",
+    "ENTITY_TYPE_DETECTION_COMPLETE",
+    "DETECTED_DOMAIN",
+    "PROPOSED_ENTITY_TYPES",
 ]

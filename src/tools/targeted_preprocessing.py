@@ -22,6 +22,13 @@ from ..models.target_schema import (
     RelationshipDefinition,
     APPROVED_TARGET_SCHEMA_KEY,
 )
+# Import LLM detection for domain-agnostic rating conversion
+from .llm_detection import convert_text_to_rating as llm_convert_ratings
+
+# Configuration flag for LLM-based rating conversion
+# Set to True to use LLM for text-to-rating conversion (domain-agnostic)
+# Set to False to use hardcoded TEXT_TO_RATING_MAP (faster but domain-specific)
+USE_LLM_RATING = True
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +41,8 @@ GENERATED_FILES = "generated_files"
 PREPROCESSING_FEEDBACK_KEY = "preprocessing_feedback"
 NEEDS_SCHEMA_REVISION = "needs_schema_revision"
 SCHEMA_REVISION_REASON = "schema_revision_reason"
+# Progress tracking for checkpoint/resume support
+EXTRACTION_PROGRESS = "extraction_progress"
 
 
 def _get_import_dir() -> Optional[Path]:
@@ -42,6 +51,29 @@ def _get_import_dir() -> Optional[Path]:
     if not import_dir_path:
         return None
     return Path(import_dir_path)
+
+
+def _safe_regex_match(pattern: str, text: str, flags: int = re.IGNORECASE) -> bool:
+    """
+    Safely execute regex match, catching invalid pattern errors.
+
+    Args:
+        pattern: The regex pattern to match
+        text: The text to search in
+        flags: Regex flags (default: re.IGNORECASE)
+
+    Returns:
+        True if pattern matches, False otherwise (including for invalid patterns)
+    """
+    try:
+        return bool(re.search(pattern, text, flags))
+    except re.error as e:
+        logger.warning(f"Invalid regex pattern '{pattern}': {e}. Falling back to substring match.")
+        # Fallback to simple substring match
+        try:
+            return pattern.lower() in text.lower()
+        except Exception:
+            return False
 
 
 def _get_approved_schema(tool_context: ToolContext) -> Optional[TargetSchema]:
@@ -92,7 +124,7 @@ def _find_column_by_pattern(df: pd.DataFrame, pattern: str) -> Optional[str]:
     for col in df.columns:
         # Normalize column name by stripping whitespace
         col_normalized = col.strip() if isinstance(col, str) else str(col)
-        if re.search(pattern, col_normalized, re.IGNORECASE):
+        if _safe_regex_match(pattern, col_normalized):
             return col
     return None
 
@@ -103,7 +135,7 @@ def _find_columns_by_pattern(df: pd.DataFrame, pattern: str) -> List[str]:
     for col in df.columns:
         # Normalize column name by stripping whitespace
         col_normalized = col.strip() if isinstance(col, str) else str(col)
-        if re.search(pattern, col_normalized, re.IGNORECASE):
+        if _safe_regex_match(pattern, col_normalized):
             matched.append(col)
     return matched
 
@@ -151,9 +183,13 @@ def _extract_name_from_column_header(column_name: str, name_regex: Optional[str]
     ]
 
     for pattern in patterns:
-        match = re.search(pattern, column_name)
-        if match:
-            return match.group(1).strip()
+        try:
+            match = re.search(pattern, column_name)
+            if match:
+                return match.group(1).strip()
+        except re.error as e:
+            logger.warning(f"Regex pattern error in _extract_name_from_column_header: {e}")
+            continue
 
     # No quotes found, return cleaned column name
     return column_name.strip()
@@ -236,6 +272,23 @@ def extract_entities_for_node(
     Returns:
         Dictionary with extracted entities
     """
+    from .task_manager import save_checkpoint
+
+    # Check if already completed (for checkpoint/resume support)
+    file_name = Path(file_path).name if file_path else "unknown"
+    progress_key = f"entity:{file_name}:{node_label}"
+    progress = get_state_value(tool_context, EXTRACTION_PROGRESS, {})
+
+    if progress.get(progress_key) == "completed":
+        logger.info(f"Skipping already completed extraction: {progress_key}")
+        existing_results = get_state_value(tool_context, TARGETED_EXTRACTION_RESULTS, {})
+        existing_entities = existing_results.get(node_label, [])
+        return tool_success("extraction_skipped", {
+            "node_label": node_label,
+            "count": len(existing_entities),
+            "reason": "Already extracted (checkpoint)",
+        })
+
     # Validate: prevent extraction from already-extracted output files
     if _is_extracted_output_file(file_path):
         logger.warning(
@@ -264,8 +317,17 @@ def extract_entities_for_node(
     hints = node.extraction_hints
     source_type = hints.get("source_type", "entity_selection")
 
+    # Get existing entities to ensure globally unique IDs
+    results = get_state_value(tool_context, TARGETED_EXTRACTION_RESULTS, {})
+    existing_entities = results.get(node_label, [])
+    existing_count = len(existing_entities)
+
+    # Get existing entity maps to avoid duplicate names
+    entity_maps = get_state_value(tool_context, TARGETED_ENTITY_MAPS, {})
+    existing_map = entity_maps.get(node_label, {})
+
     entities = []
-    value_to_id = {}
+    value_to_id = dict(existing_map)  # Start with existing mappings
 
     # ============================================================
     # Mode 1: Extract from column headers (for Aspect nodes)
@@ -283,7 +345,8 @@ def extract_entities_for_node(
                 f"Available columns: {list(df.columns[:10])}..."
             )
 
-        for i, col in enumerate(matched_columns):
+        new_entity_count = 0
+        for col in matched_columns:
             # Extract semantic name from column header
             aspect_name = _extract_name_from_column_header(col, name_regex)
 
@@ -291,7 +354,8 @@ def extract_entities_for_node(
             if aspect_name in value_to_id:
                 continue
 
-            entity_id = f"{node_label}_{i}"
+            entity_id = f"{node_label}_{existing_count + new_entity_count}"
+            new_entity_count += 1
             entity = {
                 node.unique_property: entity_id,
                 "name": aspect_name,
@@ -346,16 +410,18 @@ def extract_entities_for_node(
         # Extract unique values
         unique_values = df[target_column].dropna().unique()
 
-        for i, value in enumerate(unique_values):
+        new_entity_count = 0
+        for value in unique_values:
             value_str = str(value).strip()
-            if not value_str or value_str.lower() in ['nan', 'none', '无', '-', '']:
+            if not value_str or value_str.lower() in ['nan', 'none', '無', '-', '']:
                 continue
 
             # Skip if already seen
             if value_str in value_to_id:
                 continue
 
-            entity_id = f"{node_label}_{i}"
+            entity_id = f"{node_label}_{existing_count + new_entity_count}"
+            new_entity_count += 1
             entity = {
                 node.unique_property: entity_id,
                 "name": value_str,
@@ -377,14 +443,19 @@ def extract_entities_for_node(
 
         logger.info(f"Extracted {len(entities)} {node_label} entities from column '{target_column}'")
 
-    # Store in state
-    results = get_state_value(tool_context, TARGETED_EXTRACTION_RESULTS, {})
-    results[node_label] = entities
+    # Store in state (append to existing, reusing results from above)
+    existing_entities.extend(entities)
+    results[node_label] = existing_entities
     set_state_value(tool_context, TARGETED_EXTRACTION_RESULTS, results)
 
-    entity_maps = get_state_value(tool_context, TARGETED_ENTITY_MAPS, {})
+    # Update entity maps (value_to_id already includes existing_map)
     entity_maps[node_label] = value_to_id
     set_state_value(tool_context, TARGETED_ENTITY_MAPS, entity_maps)
+
+    # Mark as completed and save checkpoint
+    progress[progress_key] = "completed"
+    set_state_value(tool_context, EXTRACTION_PROGRESS, progress)
+    save_checkpoint(tool_context)
 
     return tool_success("extracted_entities", {
         "node_label": node_label,
@@ -419,6 +490,23 @@ def extract_relationship_data(
     Returns:
         Dictionary with extracted relationship data
     """
+    from .task_manager import save_checkpoint
+
+    # Check if already completed (for checkpoint/resume support)
+    file_name = Path(file_path).name if file_path else "unknown"
+    progress_key = f"rel:{file_name}:{relationship_type}"
+    progress = get_state_value(tool_context, EXTRACTION_PROGRESS, {})
+
+    if progress.get(progress_key) == "completed":
+        logger.info(f"Skipping already completed extraction: {progress_key}")
+        existing_rel_data = get_state_value(tool_context, TARGETED_RELATIONSHIP_DATA, {})
+        existing_rels = existing_rel_data.get(relationship_type, [])
+        return tool_success("extraction_skipped", {
+            "relationship_type": relationship_type,
+            "count": len(existing_rels),
+            "reason": "Already extracted (checkpoint)",
+        })
+
     # Validate: prevent extraction from already-extracted output files
     if _is_extracted_output_file(file_path):
         logger.warning(
@@ -473,7 +561,7 @@ def extract_relationship_data(
     def find_column(pattern: str) -> Optional[str]:
         for col in df.columns:
             col_normalized = col.strip() if isinstance(col, str) else str(col)
-            if re.search(pattern, col_normalized, re.IGNORECASE):
+            if _safe_regex_match(pattern, col_normalized):
                 return col
         return None
 
@@ -499,7 +587,7 @@ def extract_relationship_data(
 
         for col in df.columns:
             col_normalized = col.strip() if isinstance(col, str) else str(col)
-            if re.search(column_pattern, col_normalized, re.IGNORECASE):
+            if _safe_regex_match(column_pattern, col_normalized):
                 # Extract aspect name from column header
                 aspect_name = _extract_name_from_column_header(col, hints.get("name_regex"))
 
@@ -676,6 +764,11 @@ def extract_relationship_data(
     # Update entity maps
     set_state_value(tool_context, TARGETED_ENTITY_MAPS, entity_maps)
 
+    # Mark as completed and save checkpoint
+    progress[progress_key] = "completed"
+    set_state_value(tool_context, EXTRACTION_PROGRESS, progress)
+    save_checkpoint(tool_context)
+
     logger.info(f"Extracted {len(relationships)} relationships of type '{relationship_type}'")
 
     return tool_success("extracted_relationships", {
@@ -688,26 +781,41 @@ def extract_relationship_data(
 
 
 def save_extracted_data(
-    output_dir: str,
     tool_context: ToolContext,
     prefix: str = "targeted",
+    output_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Save all extracted entity and relationship data to CSV files.
 
     Args:
-        output_dir: Directory to save files (relative to import dir)
         tool_context: ADK ToolContext
         prefix: Prefix for output file names
+        output_dir: Directory to save files (optional, uses task dir if available)
 
     Returns:
         Dictionary with saved file paths
     """
-    import_dir = _get_import_dir()
-    if import_dir:
-        full_output_dir = import_dir / output_dir
+    from .task_manager import get_task_config, save_checkpoint
+
+    # Determine output directory
+    task_config = get_task_config(tool_context)
+    if task_config and not output_dir:
+        # Use task's extracted directory
+        full_output_dir = Path(task_config["extracted_dir"])
+    elif output_dir:
+        import_dir = _get_import_dir()
+        if import_dir:
+            full_output_dir = import_dir / output_dir
+        else:
+            full_output_dir = Path(output_dir)
     else:
-        full_output_dir = Path(output_dir)
+        # Fallback for backward compatibility
+        import_dir = _get_import_dir()
+        if import_dir:
+            full_output_dir = import_dir / "extracted_data"
+        else:
+            full_output_dir = Path("extracted_data")
 
     full_output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -747,6 +855,9 @@ def save_extracted_data(
 
     # Store file list in state
     set_state_value(tool_context, GENERATED_FILES, saved_files)
+
+    # Save checkpoint after data is saved
+    save_checkpoint(tool_context)
 
     return tool_success("saved_files", {
         "output_dir": str(full_output_dir),
@@ -927,13 +1038,73 @@ DEFAULT_NULL_VALUES = [
     "(空)", "空", "(无)", "(none)", "(skip)", "skip",
 ]
 
-# Common text-to-rating mappings for Chinese survey data
+# Common text-to-rating mappings for Chinese survey data (DEPRECATED - use LLM)
+# NOTE: These mappings are kept for backward compatibility only.
+# When USE_LLM_RATING = True, LLM-based conversion is used instead.
 TEXT_TO_RATING_MAP = {
     "非常好": 10, "很好": 9, "好": 8, "不错": 7,
     "一般": 5, "较差": 4, "差": 3, "很差": 2, "非常差": 1,
     "非常满意": 10, "满意": 8, "一般": 5, "不满意": 3, "非常不满意": 1,
     "非常同意": 10, "同意": 8, "中立": 5, "不同意": 3, "非常不同意": 1,
 }
+
+
+def _convert_ratings_with_llm(
+    df: pd.DataFrame,
+    col: str,
+    tool_context: ToolContext,
+) -> int:
+    """
+    Convert text ratings to numeric values using LLM.
+
+    This is the domain-agnostic alternative to TEXT_TO_RATING_MAP.
+
+    Args:
+        df: DataFrame with the data (modified in place)
+        col: Column name to convert
+        tool_context: ADK ToolContext
+
+    Returns:
+        Number of values converted
+    """
+    # Get unique non-numeric text values in the column
+    text_values = []
+    for val in df[col].dropna().unique():
+        val_str = str(val).strip()
+        # Skip if already numeric or empty
+        if not val_str or val_str.replace('.', '').replace('-', '').isdigit():
+            continue
+        # Skip known placeholder values
+        if val_str.lower() in ['nan', 'none', 'null', 'na', 'n/a', '-', '']:
+            continue
+        text_values.append(val_str)
+
+    if not text_values:
+        return 0
+
+    logger.info(f"Converting {len(text_values)} unique text values in '{col}' using LLM")
+
+    # Call LLM for conversion
+    result = llm_convert_ratings(text_values, tool_context)
+
+    if result.get("status") == "error":
+        logger.warning(f"LLM rating conversion failed for '{col}': {result.get('error')}")
+        return 0
+
+    mappings = result.get("mappings", {})
+    total_converted = 0
+
+    # Apply mappings to dataframe
+    for text_val, numeric_val in mappings.items():
+        if numeric_val is not None:
+            mask = df[col].astype(str).str.strip() == text_val
+            count = mask.sum()
+            if count > 0:
+                df.loc[mask, col] = numeric_val
+                total_converted += int(count)
+                logger.debug(f"  Converted '{text_val}' -> {numeric_val} ({count} values)")
+
+    return total_converted
 
 
 def clean_columns_for_schema(
@@ -1049,19 +1220,26 @@ def clean_columns_for_schema(
             # Check if this column matches a rating pattern
             is_rating_col = False
             for pattern in rating_column_patterns:
-                if re.search(pattern, col, re.IGNORECASE):
+                if _safe_regex_match(pattern, col):
                     is_rating_col = True
                     break
 
             if is_rating_col:
                 # Convert text values to ratings
-                for text_val, numeric_val in TEXT_TO_RATING_MAP.items():
-                    mask = df[col].astype(str).str.strip() == text_val
-                    count = mask.sum()
-                    if count > 0:
-                        df.loc[mask, col] = numeric_val
-                        col_changes["ratings_converted"] += int(count)
-                        total_ratings_converted += int(count)
+                # Use LLM when enabled for domain-agnostic conversion
+                if USE_LLM_RATING:
+                    converted = _convert_ratings_with_llm(df, col, tool_context)
+                    col_changes["ratings_converted"] += converted
+                    total_ratings_converted += converted
+                else:
+                    # Fallback to pattern-based conversion
+                    for text_val, numeric_val in TEXT_TO_RATING_MAP.items():
+                        mask = df[col].astype(str).str.strip() == text_val
+                        count = mask.sum()
+                        if count > 0:
+                            df.loc[mask, col] = numeric_val
+                            col_changes["ratings_converted"] += int(count)
+                            total_ratings_converted += int(count)
 
         # 3. Strip whitespace from string values
         if df[col].dtype == 'object':
@@ -1071,6 +1249,8 @@ def clean_columns_for_schema(
             changes_made[col] = col_changes
 
     # Save cleaned file
+    from .task_manager import get_task_config, save_checkpoint
+
     import_dir = _get_import_dir()
     if import_dir:
         original_path = import_dir / target_file
@@ -1082,7 +1262,11 @@ def clean_columns_for_schema(
     # Append _schema_cleaned to filename
     cleaned_filename = f"{stem}_schema_cleaned{suffix}"
 
-    if import_dir:
+    # Determine output directory (use task's clean_dir if available)
+    task_config = get_task_config(tool_context)
+    if task_config:
+        cleaned_path = Path(task_config["clean_dir"]) / cleaned_filename
+    elif import_dir:
         cleaned_path = import_dir / cleaned_filename
     else:
         cleaned_path = Path(cleaned_filename)
@@ -1094,7 +1278,14 @@ def clean_columns_for_schema(
         df.to_excel(cleaned_path, index=False)
 
     # Store cleaned file path in state for extraction to use
-    set_state_value(tool_context, "schema_cleaned_file", cleaned_filename)
+    # If using task directory, store relative path within task
+    if task_config:
+        set_state_value(tool_context, "schema_cleaned_file", str(cleaned_path))
+    else:
+        set_state_value(tool_context, "schema_cleaned_file", cleaned_filename)
+
+    # Save checkpoint after cleaning
+    save_checkpoint(tool_context)
 
     logger.info(
         f"Schema-based cleaning complete: {total_placeholders_replaced} placeholders replaced, "
@@ -1103,7 +1294,7 @@ def clean_columns_for_schema(
 
     return tool_success("schema_cleaning_complete", {
         "original_file": target_file,
-        "cleaned_file": cleaned_filename,
+        "cleaned_file": str(cleaned_path),
         "columns_cleaned": list(schema_columns),
         "changes_made": changes_made,
         "summary": {
@@ -1211,6 +1402,20 @@ def extract_entities_from_text_column(
         Dictionary with extracted entities
     """
     import json
+
+    # Check if already completed (for checkpoint/resume support)
+    file_name = Path(file_path).name if file_path else "unknown"
+    progress_key = f"entity:{file_name}:{column_name}:{node_label}"
+    progress = get_state_value(tool_context, EXTRACTION_PROGRESS, {})
+
+    if progress.get(progress_key) == "completed":
+        logger.info(f"Skipping already completed extraction: {progress_key}")
+        return tool_success("extraction_skipped", {
+            "node_label": node_label,
+            "column_name": column_name,
+            "reason": "Already extracted in previous run",
+            "progress_key": progress_key,
+        })
 
     schema = _get_approved_schema(tool_context)
     if not schema:
@@ -1331,8 +1536,13 @@ def extract_entities_from_text_column(
     entities = []
     value_to_id = {}
 
+    # Get existing entity count to ensure globally unique IDs
+    results = get_state_value(tool_context, TARGETED_EXTRACTION_RESULTS, {})
+    existing_entities = results.get(node_label, [])
+    existing_count = len(existing_entities)
+
     for i, (entity_name, row_ids) in enumerate(entity_to_row_map.items()):
-        entity_id = f"{node_label}_{i}"
+        entity_id = f"{node_label}_{existing_count + i}"
         entity = {
             node.unique_property: entity_id,
             "name": entity_name,
@@ -1342,11 +1552,9 @@ def extract_entities_from_text_column(
         entities.append(entity)
         value_to_id[entity_name] = entity_id
 
-    # Store in state
-    results = get_state_value(tool_context, TARGETED_EXTRACTION_RESULTS, {})
-    existing = results.get(node_label, [])
-    existing.extend(entities)
-    results[node_label] = existing
+    # Store in state (reuse results from above)
+    existing_entities.extend(entities)
+    results[node_label] = existing_entities
     set_state_value(tool_context, TARGETED_EXTRACTION_RESULTS, results)
 
     entity_maps = get_state_value(tool_context, TARGETED_ENTITY_MAPS, {})
@@ -1360,6 +1568,10 @@ def extract_entities_from_text_column(
     set_state_value(tool_context, text_extraction_map_key, entity_to_row_map)
 
     logger.info(f"Extracted {len(entities)} {node_label} entities from text column '{column_name}'")
+
+    # Mark as completed for checkpoint/resume support
+    progress[progress_key] = "completed"
+    set_state_value(tool_context, EXTRACTION_PROGRESS, progress)
 
     return tool_success("extracted_entities", {
         "node_label": node_label,
@@ -1391,6 +1603,20 @@ def extract_relationships_from_text_column(
     Returns:
         Dictionary with extracted relationships
     """
+    # Check if already completed (for checkpoint/resume support)
+    file_name = Path(file_path).name if file_path else "unknown"
+    progress_key = f"rel:{file_name}:{column_name}:{relationship_type}"
+    progress = get_state_value(tool_context, EXTRACTION_PROGRESS, {})
+
+    if progress.get(progress_key) == "completed":
+        logger.info(f"Skipping already completed extraction: {progress_key}")
+        return tool_success("extraction_skipped", {
+            "relationship_type": relationship_type,
+            "column_name": column_name,
+            "reason": "Already extracted in previous run",
+            "progress_key": progress_key,
+        })
+
     schema = _get_approved_schema(tool_context)
     if not schema:
         return tool_error("No approved target schema found.")
@@ -1485,6 +1711,10 @@ def extract_relationships_from_text_column(
     set_state_value(tool_context, TARGETED_ENTITY_MAPS, entity_maps)
 
     logger.info(f"Extracted {len(relationships)} relationships of type '{relationship_type}' from text")
+
+    # Mark as completed for checkpoint/resume support
+    progress[progress_key] = "completed"
+    set_state_value(tool_context, EXTRACTION_PROGRESS, progress)
 
     return tool_success("extracted_relationships", {
         "relationship_type": relationship_type,

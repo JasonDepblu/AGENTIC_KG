@@ -151,11 +151,11 @@ export function GraphVisualization({ isOpen, onClose }: Props) {
       let graphRes;
 
       if (selectedFilterValue === '__all__') {
-        // Fetch all data (limited sample)
-        graphRes = await fetch('/api/graph/sample?limit=200');
+        // Fetch all data (use large limit to get complete graph)
+        graphRes = await fetch('/api/graph/sample?limit=5000');
       } else {
-        // Fetch data centered on selected node
-        graphRes = await fetch(`/api/graph/by-center-node/${encodeURIComponent(selectedFilterValue)}`);
+        // Fetch data centered on selected node (increased limit)
+        graphRes = await fetch(`/api/graph/by-center-node/${encodeURIComponent(selectedFilterValue)}?limit=500`);
       }
 
       if (!graphRes.ok) {

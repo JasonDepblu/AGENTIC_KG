@@ -1,0 +1,241 @@
+{
+  "name": "Target Schema",
+  "description": "Knowledge graph schema designed from raw data",
+  "nodes": {
+    "Respondent": {
+      "label": "Respondent",
+      "unique_property": "respondent_id",
+      "properties": [
+        "respondent_id"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "entity_selection",
+        "column_pattern": "序号"
+      }
+    },
+    "Brand": {
+      "label": "Brand",
+      "unique_property": "brand_name",
+      "properties": [
+        "brand_name"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "entity_selection",
+        "column_pattern": "8、您本次调研的品牌是?"
+      }
+    },
+    "Model": {
+      "label": "Model",
+      "unique_property": "model_name",
+      "properties": [
+        "model_name"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "entity_selection",
+        "column_pattern": "9、您本次调研的车型及配置是?"
+      }
+    },
+    "Store": {
+      "label": "Store",
+      "unique_property": "store_name",
+      "properties": [
+        "store_name"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "entity_selection",
+        "column_pattern": "10、10 您本次到访的门店是"
+      }
+    },
+    "Aspect": {
+      "label": "Aspect",
+      "unique_property": "aspect_name",
+      "properties": [
+        "aspect_name"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "column_header",
+        "column_pattern": "_score$",
+        "name_regex": "(.+)_score$"
+      }
+    },
+    "Feature": {
+      "label": "Feature",
+      "unique_property": "feature_id",
+      "properties": [
+        "feature_id"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": ".*?优秀点|.*?劣势点"
+      }
+    },
+    "Experience": {
+      "label": "Experience",
+      "unique_property": "experience_id",
+      "properties": [
+        "experience_id"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": ".*?体验是？—优秀点|.*?体验是？—劣势点"
+      }
+    },
+    "Issue": {
+      "label": "Issue",
+      "unique_property": "issue_id",
+      "properties": [
+        "issue_id"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": ".*?劣势点"
+      }
+    },
+    "Component": {
+      "label": "Component",
+      "unique_property": "component_id",
+      "properties": [
+        "component_id"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": ".*?优秀点|.*?劣势点"
+      }
+    }
+  },
+  "relationships": {
+    "RATES": {
+      "relationship_type": "RATES",
+      "from_node": "Respondent",
+      "to_node": "Aspect",
+      "properties": [
+        "score"
+      ],
+      "extraction_hints": {
+        "source_type": "rating_column",
+        "column_pattern": "_score$",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "EVALUATED_BRAND": {
+      "relationship_type": "EVALUATED_BRAND",
+      "from_node": "Respondent",
+      "to_node": "Brand",
+      "properties": [],
+      "extraction_hints": {
+        "source_type": "entity_reference",
+        "column_pattern": "8、您本次调研的品牌是?",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "VISITED_STORE": {
+      "relationship_type": "VISITED_STORE",
+      "from_node": "Respondent",
+      "to_node": "Store",
+      "properties": [],
+      "extraction_hints": {
+        "source_type": "entity_reference",
+        "column_pattern": "10、10 您本次到访的门店是",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "MENTIONED_FEATURE": {
+      "relationship_type": "MENTIONED_FEATURE",
+      "from_node": "Respondent",
+      "to_node": "Feature",
+      "properties": [
+        "sentiment"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": ".*?优秀点|.*?劣势点",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "HAS_EXPERIENCE": {
+      "relationship_type": "HAS_EXPERIENCE",
+      "from_node": "Respondent",
+      "to_node": "Experience",
+      "properties": [
+        "sentiment"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": ".*?体验是？—优秀点|.*?体验是？—劣势点",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "IDENTIFIED_ISSUE": {
+      "relationship_type": "IDENTIFIED_ISSUE",
+      "from_node": "Respondent",
+      "to_node": "Issue",
+      "properties": [
+        "severity"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": ".*?劣势点",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "RELATES_TO_COMPONENT": {
+      "relationship_type": "RELATES_TO_COMPONENT",
+      "from_node": "Feature",
+      "to_node": "Component",
+      "properties": [
+        "granularity"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": ".*?优秀点|.*?劣势点",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "HAS_EXPERIENCE_OF": {
+      "relationship_type": "HAS_EXPERIENCE_OF",
+      "from_node": "Respondent",
+      "to_node": "Experience",
+      "properties": [
+        "sentiment"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": ".*?体验是？—优秀点|.*?体验是？—劣势点",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "HAS_ISSUE": {
+      "relationship_type": "HAS_ISSUE",
+      "from_node": "Feature",
+      "to_node": "Issue",
+      "properties": [
+        "severity"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": ".*?劣势点",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "BELONGS_TO": {
+      "relationship_type": "BELONGS_TO",
+      "from_node": "Model",
+      "to_node": "Brand",
+      "properties": [],
+      "extraction_hints": {
+        "source_type": "foreign_key",
+        "from_column": "model_name",
+        "to_column": "brand_name"
+      }
+    }
+  }
+}

@@ -170,6 +170,11 @@ class WebSocketMessage(BaseModel):
     state: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     is_final: bool = False
+    # Progress tracking fields for extraction phase
+    progress: Optional[int] = None  # Progress percentage (0-100)
+    progress_current: Optional[int] = None  # Current item number
+    progress_total: Optional[int] = None  # Total items to process
+    progress_item: Optional[str] = None  # Current item being processed
 
 
 # API Response Models

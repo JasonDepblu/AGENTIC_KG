@@ -37,8 +37,21 @@ Think carefully, repeating these steps until finished:
 2. evaluate the relevance of each file, then record the list of suggested files using the 'set_suggested_files' tool
 3. use the 'get_suggested_files' tool to get the list of suggested files
 4. ask the user to approve the set of suggested files
-5. If the user has feedback, go back to step 1 with that feedback in mind
+5. Handle user feedback carefully:
+   - If user rejects files or wants different files → go back to step 1
+   - If user approves ALL suggested files → proceed to step 6
+   - **If user approves only SPECIFIC files** (e.g., "use only file1.csv", "基于file1.csv"):
+     a. First call 'set_suggested_files' with ONLY the files user specified
+     b. Then proceed to step 6 to approve the updated list
 6. If approved, use the 'approve_suggested_files' tool to record the approval
+
+IMPORTANT: When user specifies particular files, you MUST update the suggested files list
+BEFORE approving. Do NOT approve files that the user did not explicitly select.
+
+Examples of partial file selection:
+- "只使用 data.csv" → set_suggested_files(["data.csv"]), then approve
+- "基于'序号.csv'文件" → set_suggested_files(["序号.csv"]), then approve
+- "Use file1.csv and file2.csv only" → set_suggested_files(["file1.csv", "file2.csv"]), then approve
 """
 
 # Tools for the agent

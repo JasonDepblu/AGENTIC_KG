@@ -178,11 +178,25 @@ Remember: Always explain your reasoning before submitting the query.
 # Agent Tools
 # =============================================================================
 
+# Import validator tools to share - this prevents tool_calls mismatch in LoopAgent
+# When generator and validator run in a loop, message history can get shared,
+# and LiteLLM requires each tool_call to have a matching tool definition.
+from ..tools.cypher_validation import (
+    validate_cypher_syntax,
+    execute_and_validate_query,
+    approve_cypher_query,
+)
+
 CYPHER_GENERATOR_TOOLS = [
+    # Generator-specific tools (primary use)
     get_graph_schema_for_cypher,
     propose_cypher_query,
     get_cypher_feedback,
     get_sample_data,
+    # Validator tools (shared to prevent tool_calls mismatch)
+    validate_cypher_syntax,
+    execute_and_validate_query,
+    approve_cypher_query,
 ]
 
 

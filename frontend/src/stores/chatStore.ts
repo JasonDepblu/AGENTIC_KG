@@ -12,12 +12,20 @@ interface ChatStore {
   isConnected: boolean;
   isLoading: boolean;
 
+  // Extraction progress tracking
+  extractionProgress: number;
+  extractionCurrent: number;
+  extractionTotal: number;
+  extractionItem: string;
+
   // Actions
   setSessionId: (id: string | null) => void;
   setPhase: (phase: PipelinePhase) => void;
   setSessionState: (state: SessionState) => void;
   setConnected: (connected: boolean) => void;
   setLoading: (loading: boolean) => void;
+  setExtractionProgress: (progress: number, current: number, total: number, item: string) => void;
+  resetExtractionProgress: () => void;
 
   addMessage: (message: ChatMessage) => void;
   updateMessage: (id: string, content: string) => void;
@@ -33,6 +41,11 @@ export const useChatStore = create<ChatStore>((set) => ({
   messages: [],
   isConnected: false,
   isLoading: false,
+  // Extraction progress initial state
+  extractionProgress: 0,
+  extractionCurrent: 0,
+  extractionTotal: 0,
+  extractionItem: '',
 
   // Actions
   setSessionId: (id) => set({ sessionId: id }),
@@ -40,6 +53,10 @@ export const useChatStore = create<ChatStore>((set) => ({
   setSessionState: (state) => set({ sessionState: state }),
   setConnected: (connected) => set({ isConnected: connected }),
   setLoading: (loading) => set({ isLoading: loading }),
+  setExtractionProgress: (progress, current, total, item) =>
+    set({ extractionProgress: progress, extractionCurrent: current, extractionTotal: total, extractionItem: item }),
+  resetExtractionProgress: () =>
+    set({ extractionProgress: 0, extractionCurrent: 0, extractionTotal: 0, extractionItem: '' }),
 
   addMessage: (message) =>
     set((state) => ({
@@ -63,5 +80,9 @@ export const useChatStore = create<ChatStore>((set) => ({
       messages: [],
       isConnected: false,
       isLoading: false,
+      extractionProgress: 0,
+      extractionCurrent: 0,
+      extractionTotal: 0,
+      extractionItem: '',
     }),
 }));

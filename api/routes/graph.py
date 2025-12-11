@@ -365,20 +365,19 @@ async def get_graph_nodes(
 
 
 @router.get("/sample")
-async def get_graph_sample(limit: int = Query(default=1500, le=3000)):
+async def get_graph_sample(limit: int = Query(default=5000, le=10000)):
     """
     Get a sample of the graph including nodes and relationships.
     Returns data formatted for force-graph visualization.
-    Returns ALL RATES relationships and samples other relationship types.
+    Traverses from Respondent nodes to get complete connected graph.
     """
     graphdb = get_graphdb()
 
-    # Strategy: Return ALL RATES relationships (important for analysis)
-    # and sample other relationship types
-    other_limit = limit // 6  # Budget for non-RATES relationships (6 types)
+    # Strategy: Get ALL relationships in the graph
+    # This ensures we capture all nodes including those not connected to Respondent path
     query = f"""
-    // Part 1: Return ALL RATES relationships (critical for analysis)
-    MATCH (n:Respondent)-[r:RATES]->(m:Aspect)
+    // Get ALL relationships in the graph (no path restriction)
+    MATCH (n)-[r]->(m)
     RETURN
         elementId(n) as n_id,
         labels(n) as n_labels,
@@ -388,65 +387,7 @@ async def get_graph_sample(limit: int = Query(default=1500, le=3000)):
         elementId(m) as m_id,
         labels(m) as m_labels,
         properties(m) as m_props
-
-    UNION
-
-    // Part 2: Sample EVALUATED_BRAND relationships
-    MATCH (n:Respondent)-[r:EVALUATED_BRAND]->(m:Brand)
-    RETURN
-        elementId(n) as n_id,
-        labels(n) as n_labels,
-        properties(n) as n_props,
-        type(r) as r_type,
-        properties(r) as r_props,
-        elementId(m) as m_id,
-        labels(m) as m_labels,
-        properties(m) as m_props
-    LIMIT {other_limit}
-
-    UNION
-
-    // Part 3: Sample VISITED_STORE relationships
-    MATCH (n:Respondent)-[r:VISITED_STORE]->(m:Store)
-    RETURN
-        elementId(n) as n_id,
-        labels(n) as n_labels,
-        properties(n) as n_props,
-        type(r) as r_type,
-        properties(r) as r_props,
-        elementId(m) as m_id,
-        labels(m) as m_labels,
-        properties(m) as m_props
-    LIMIT {other_limit}
-
-    UNION
-
-    // Part 4: Sample BELONGS_TO relationships (Model -> Brand)
-    MATCH (n:Model)-[r:BELONGS_TO]->(m:Brand)
-    RETURN
-        elementId(n) as n_id,
-        labels(n) as n_labels,
-        properties(n) as n_props,
-        type(r) as r_type,
-        properties(r) as r_props,
-        elementId(m) as m_id,
-        labels(m) as m_labels,
-        properties(m) as m_props
-    LIMIT {other_limit}
-
-    UNION
-
-    // Part 5: Return ALL MENTIONED_FEATURE relationships (critical for text analysis)
-    MATCH (n:Respondent)-[r:MENTIONED_FEATURE]->(m:Feature)
-    RETURN
-        elementId(n) as n_id,
-        labels(n) as n_labels,
-        properties(n) as n_props,
-        type(r) as r_type,
-        properties(r) as r_props,
-        elementId(m) as m_id,
-        labels(m) as m_labels,
-        properties(m) as m_props
+    LIMIT {limit}
     """
 
     result = graphdb.send_query(query)
@@ -579,7 +520,7 @@ async def get_filter_options(label: str):
         elementId(n) as id,
         properties(n) as props
     ORDER BY properties(n)
-    LIMIT 500
+    LIMIT 2000
     """
 
     result = graphdb.send_query(query)
@@ -600,7 +541,7 @@ async def get_filter_options(label: str):
 
 
 @router.get("/by-center-node/{node_id:path}")
-async def get_graph_by_center_node(node_id: str, limit: int = Query(default=300, le=500)):
+async def get_graph_by_center_node(node_id: str, limit: int = Query(default=500, le=1000)):
     """
     Get graph data centered on a specific node and its connected nodes.
     Works with any node type.

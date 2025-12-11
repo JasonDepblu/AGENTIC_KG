@@ -6,11 +6,16 @@ Wraps the KGPipeline to provide real-time event streaming via WebSocket.
 
 import asyncio
 import uuid
+import logging
 from datetime import datetime
 from typing import Any, AsyncGenerator, Dict, Optional
 
+# Set up logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 from google.genai import types
-from google.adk.agents import LoopAgent
+from google.adk.agents import LoopAgent, RunConfig
 
 from src.llm import get_adk_llm
 from src.agents.base import make_agent_caller
@@ -103,6 +108,10 @@ class PipelineSession:
         self._cancel_requested = False
         self.phase = phase
         self.updated_at = datetime.now()
+
+        # Reset extraction progress counters for new phase
+        self._extraction_counter = 0
+        self._extraction_total = 0
 
         # Notify phase change
         yield WebSocketMessage(
@@ -203,11 +212,15 @@ class PipelineSession:
 
         while retry_count <= max_retries and not success:
             try:
+                # Configure RunConfig with higher LLM call limit
+                run_config = RunConfig(max_llm_calls=2000)
+
                 # Stream events
                 async for event in caller.runner.run_async(
                     user_id=caller.user_id,
                     session_id=caller.session_id,
-                    new_message=content
+                    new_message=content,
+                    run_config=run_config
                 ):
                     if self._cancel_requested:
                         yield WebSocketMessage(
@@ -257,6 +270,88 @@ class PipelineSession:
                                     author="Tool",
                                     is_final=False,
                                 )
+
+                                # Track progress for different phase tools
+                                # Schema Design phase tools
+                                schema_design_tools = [
+                                    'sample_raw_file_structure',
+                                    'detect_potential_entities',
+                                    'propose_node_type',
+                                    'propose_relationship_type',
+                                    'identify_text_feedback_columns',
+                                    'sample_text_column',
+                                    'analyze_text_column_entities',
+                                    'analyze_text_column_relationships',
+                                    'add_text_entity_to_schema',
+                                    'add_text_relationship_to_schema',
+                                    'standardize_column_names',
+                                ]
+                                # Extraction/Preprocessing phase tools
+                                extraction_tools = [
+                                    'extract_entities_from_text_column',
+                                    'extract_relationships_from_text_column',
+                                    'extract_node_data',
+                                    'extract_relationship_data',
+                                ]
+
+                                if tool_name in schema_design_tools or tool_name in extraction_tools:
+                                    # Increment extraction counter for progress tracking
+                                    if not hasattr(self, '_extraction_counter'):
+                                        self._extraction_counter = 0
+                                        self._extraction_total = 0
+                                    self._extraction_counter += 1
+
+                                    # Get current item description
+                                    file_path = tool_args.get('file_path', '')
+                                    file_name = file_path.split('/')[-1] if file_path else ''
+                                    item_desc = (
+                                        tool_args.get('column_name', '') or
+                                        tool_args.get('node_label', '') or
+                                        tool_args.get('label', '') or
+                                        file_name or
+                                        'Processing'
+                                    )
+
+                                    # Get total: Read from LIVE ADK session state (not cached self.state)
+                                    # The Agent writes to tool_context.state which is ADK session state
+                                    try:
+                                        live_session = await caller.get_session()
+                                        live_state = dict(live_session.state) if live_session else {}
+                                    except Exception as e:
+                                        logger.warning(f"Failed to get live session: {e}")
+                                        live_state = self.state  # Fallback to cached state
+
+                                    agent_total = live_state.get('progress_total', 0)
+                                    logger.info(f"[Progress] Tool: {tool_name}, agent_total from live_state: {agent_total}, current _extraction_total: {self._extraction_total}")
+                                    if agent_total > 0:
+                                        # Agent has set a specific total - use it
+                                        logger.info(f"[Progress] Using agent-set total: {agent_total}")
+                                        self._extraction_total = agent_total
+                                    elif self._extraction_total == 0:
+                                        # No Agent-set value and no previous estimate - use fallback estimate
+                                        if tool_name in schema_design_tools:
+                                            # Schema design: estimate based on approved files
+                                            approved_files = live_state.get('approved_files', [])
+                                            self._extraction_total = max(len(approved_files) * 5, 10)
+                                        elif live_state.get('approved_target_schema'):
+                                            # Extraction: estimate based on schema
+                                            schema = live_state.get('approved_target_schema', {})
+                                            nodes = len(schema.get('nodes', {}))
+                                            rels = len(schema.get('relationships', {}))
+                                            self._extraction_total = max((nodes + rels) * 2, 10)
+
+                                    # Use the total (Agent-set or estimated), default to 20 if still 0
+                                    total = self._extraction_total if self._extraction_total > 0 else 20
+                                    # Cap progress at 99% until completion (allow current > total without changing total)
+                                    progress = min(int(self._extraction_counter / total * 100), 99)
+
+                                    yield WebSocketMessage(
+                                        type=WebSocketMessageType.STATE_UPDATE,
+                                        progress=progress,
+                                        progress_current=self._extraction_counter,
+                                        progress_total=total,
+                                        progress_item=item_desc[:50] if item_desc else tool_name,
+                                    )
                             # Extract text content
                             elif hasattr(part, 'text') and part.text:
                                 event_content = part.text

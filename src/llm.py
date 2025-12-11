@@ -36,8 +36,8 @@ os.environ['NO_PROXY'] = '*'
 # Fallback models for rate limit scenarios
 # When primary model is rate limited, try these in order
 FALLBACK_MODELS = [
+    "qwen-plus-2025-07-28",
     "qwen-plus-latest",
-    "qwen-plus-2025-04-28",
     "qwen-turbo-latest",  # Faster, lower limits but cheaper
 ]
 
@@ -323,6 +323,26 @@ def get_langchain_llm(
         extra_body=extra_body if extra_body else None,
         openai_api_key=config.llm.api_key,
         openai_api_base=config.llm.api_base,
+    )
+
+
+def get_litellm_client():
+    """
+    Get an OpenAI client configured for LiteLLM/DashScope API.
+
+    This client is used for direct API calls to the LLM, bypassing
+    ADK or LangChain abstractions when simpler direct calls are needed.
+
+    Returns:
+        OpenAI: OpenAI client instance configured for DashScope
+    """
+    from openai import OpenAI
+
+    config = get_config()
+
+    return OpenAI(
+        api_key=config.llm.api_key,
+        base_url=config.llm.api_base
     )
 
 

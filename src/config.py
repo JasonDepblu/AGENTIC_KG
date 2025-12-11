@@ -43,7 +43,7 @@ class LLMConfig:
     ))
     default_model: str = field(default_factory=lambda: os.getenv(
         "LLM_MODEL",
-        "qwen-plus-latest"  # Default to qwen-plus for stability
+        "qwen-plus-2025-07-28"  # Default to qwen-plus for stability
     ))
     embedding_model: str = field(default_factory=lambda: os.getenv(
         "EMBEDDING_MODEL",
@@ -65,7 +65,7 @@ class LLMConfig:
     MODELS = {
         "kimi": "Moonshot-Kimi-K2-Instruct",
         "qwen-large": "qwen3-235b-a22b-instruct-2507",
-        "qwen-plus": "qwen-plus-latest",
+        "qwen-plus": "qwen-plus-2025-07-28",
         "qwen-medium": "qwen3-30b-a3b-instruct-2507",
         "qwen-flash": "qwen-flash",  # Fast and cheap, supports deep thinking
     }
@@ -104,9 +104,9 @@ class TextExtractionConfig:
     batch_size: int = field(
         default_factory=lambda: int(os.getenv("TEXT_EXTRACTION_BATCH_SIZE", "10"))
     )
-    # LLM model for text analysis (defaults to qwen-plus-latest)
+    # LLM model for text analysis (defaults to qwen-plus-2025-07-28)
     model: str = field(
-        default_factory=lambda: os.getenv("TEXT_EXTRACTION_MODEL", "qwen-plus-latest")
+        default_factory=lambda: os.getenv("TEXT_EXTRACTION_MODEL", "qwen-plus-2025-07-28")
     )
 
 

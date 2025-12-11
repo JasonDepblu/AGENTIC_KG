@@ -1,0 +1,72 @@
+from_id,to_id,to_name,relationship_type,source_column
+Respondent_0,Model_0,L90 _顶配,EVALUATED_MODEL,model
+Respondent_1,Model_1,P7顶配,EVALUATED_MODEL,model
+Respondent_2,Model_2,X9-增程版,EVALUATED_MODEL,model
+Respondent_3,Model_3,E8 MAX,EVALUATED_MODEL,model
+Respondent_4,Model_4,小鹏P7-标准版,EVALUATED_MODEL,model
+Respondent_5,Model_5,比亚迪海鸥-荣耀版305,EVALUATED_MODEL,model
+Respondent_6,Model_6,银河M9-2025款 230KM 两驱探索版,EVALUATED_MODEL,model
+Respondent_7,Model_7,C16-增程版,EVALUATED_MODEL,model
+Respondent_8,Model_8,天工06 550续航,EVALUATED_MODEL,model
+Respondent_9,Model_9,福特智趣烈马全地形露营SUV-长滩增程版,EVALUATED_MODEL,model
+Respondent_10,Model_10,次顶配和次低配,EVALUATED_MODEL,model
+Respondent_11,Model_11,海豹 7,EVALUATED_MODEL,model
+Respondent_12,Model_12,银河A7-顶配,EVALUATED_MODEL,model
+Respondent_13,Model_13,奥迪A6L—豪华型,EVALUATED_MODEL,model
+Respondent_14,Model_14,长安深蓝s07,EVALUATED_MODEL,model
+Respondent_15,Model_15,S07,EVALUATED_MODEL,model
+Respondent_16,Model_16,享界S9T 顶配 旅行版,EVALUATED_MODEL,model
+Respondent_17,Model_17,乐道L90-Ultra,EVALUATED_MODEL,model
+Respondent_18,Model_18,向往S7-205Km激光雷达牌,EVALUATED_MODEL,model
+Respondent_19,Model_19,次顶配，选配轮辋和踏板,EVALUATED_MODEL,model
+Respondent_20,Model_20,i6两驱标准版,EVALUATED_MODEL,model
+Respondent_21,Model_21,LAFA5-顶配,EVALUATED_MODEL,model
+Respondent_22,Model_22,蔚来ES8-豪华版,EVALUATED_MODEL,model
+Respondent_23,Model_23,L6-顶配,EVALUATED_MODEL,model
+Respondent_24,Model_24,小鹏X9增程1602max,EVALUATED_MODEL,model
+Respondent_25,Model_25,C10顶配,EVALUATED_MODEL,model
+Respondent_26,Model_26,理想家,EVALUATED_MODEL,model
+Respondent_27,Model_27,方程豹钛7-两驱Max版,EVALUATED_MODEL,model
+Respondent_28,Model_28,i6（只有一个版本配置）,EVALUATED_MODEL,model
+Respondent_29,Model_29,埃安i60,EVALUATED_MODEL,model
+Respondent_30,Model_30,ModelY后轮驱动长续航,EVALUATED_MODEL,model
+Respondent_31,Model_31,极氪7X 2026款 75KWh后驱MAX版,EVALUATED_MODEL,model
+Respondent_32,Model_32,极氪9x 顶配,EVALUATED_MODEL,model
+Respondent_33,Model_12,银河A7-顶配,EVALUATED_MODEL,model
+Respondent_34,Model_33,9X，顶配,EVALUATED_MODEL,model
+Respondent_35,Model_34,极狐T1-425max顶配,EVALUATED_MODEL,model
+Respondent_36,Model_35,福特智趣烈马,EVALUATED_MODEL,model
+Respondent_37,Model_36,630激光utral,EVALUATED_MODEL,model
+Respondent_38,Model_37,新ES8,EVALUATED_MODEL,model
+Respondent_39,Model_38,小鹏X9-增程7座版,EVALUATED_MODEL,model
+Respondent_40,Model_39,顶配,EVALUATED_MODEL,model
+Respondent_41,Model_40,es8-顶配,EVALUATED_MODEL,model
+Respondent_42,Model_41,ICAR V23,EVALUATED_MODEL,model
+Respondent_43,Model_42,AUDI-E5先锋plus,EVALUATED_MODEL,model
+Respondent_44,Model_43,HT670,EVALUATED_MODEL,model
+Respondent_45,Model_44,智己LS9,EVALUATED_MODEL,model
+Respondent_46,Model_45,奇瑞风云A9L,EVALUATED_MODEL,model
+Respondent_47,Model_46,EQE 500 4MATIC Luxury SUV,EVALUATED_MODEL,model
+Respondent_48,Model_47,问界M8-6座增程/纯电Max+,EVALUATED_MODEL,model
+Respondent_49,Model_48,劲享版,EVALUATED_MODEL,model
+Respondent_50,Model_49,A06 630max,EVALUATED_MODEL,model
+Respondent_51,Model_50,星光730-2025插混 125km 豪华版,EVALUATED_MODEL,model
+Respondent_52,Model_51,i60,EVALUATED_MODEL,model
+Respondent_53,Model_52,全新ES8,EVALUATED_MODEL,model
+Respondent_54,Model_53,R7纯电ultra,EVALUATED_MODEL,model
+Respondent_55,Model_54,别克至境世家高配,EVALUATED_MODEL,model
+Respondent_56,Model_55,风云A9L,EVALUATED_MODEL,model
+Respondent_57,Model_56,ＬＳ6-增程52max,EVALUATED_MODEL,model
+Respondent_58,Model_57,智界R7 2026款纯电Ultra,EVALUATED_MODEL,model
+Respondent_59,Model_58,燃油车，2.5xl V6配置,EVALUATED_MODEL,model
+Respondent_60,Model_59,C16，六座版高配,EVALUATED_MODEL,model
+Respondent_61,Model_60,吉利银河M9次顶配,EVALUATED_MODEL,model
+Respondent_62,Model_61,方程豹8 顶配,EVALUATED_MODEL,model
+Respondent_63,Model_62,v23-550两驱运动版,EVALUATED_MODEL,model
+Respondent_64,Model_63,i6 顶配,EVALUATED_MODEL,model
+Respondent_65,Model_64,小米yu7 基础版,EVALUATED_MODEL,model
+Respondent_66,Model_65,银河M9,EVALUATED_MODEL,model
+Respondent_67,Model_66,赛那  双擎四驱豪华版,EVALUATED_MODEL,model
+Respondent_68,Model_67,ES8-6座版,EVALUATED_MODEL,model
+Respondent_69,Model_68,极石,EVALUATED_MODEL,model
+Respondent_70,Model_69,问界m7-中配,EVALUATED_MODEL,model

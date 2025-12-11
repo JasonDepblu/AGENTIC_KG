@@ -39,6 +39,7 @@ from ..tools.schema_design import (
     add_text_relationship_to_schema,
     get_text_analysis_summary,
 )
+from ..tools.common import set_progress_total
 
 
 # Schema Design Agent Instructions - SIMPLIFIED for stability
@@ -47,6 +48,20 @@ You are an expert at knowledge graph modeling. Your task is to design a target s
 that defines what nodes and relationships should be extracted from the raw data.
 
 ## YOUR ONLY JOB: Design the schema, NOT extract data!
+
+## MANDATORY: Progress Tracking (DO THIS OR UI WILL BREAK!)
+After calling 'sample_raw_file_structure', look at the 'suggested_progress_total' field in the response.
+You MUST call 'set_progress_total' IMMEDIATELY with that value:
+```
+set_progress_total(total=<suggested_progress_total>, description="Designing schema")
+```
+DO NOT SKIP THIS! The UI progress bar relies on this call.
+
+## LLM-Powered Domain Detection (Automatic)
+The system uses LLM to automatically detect entity types and text feedback columns
+from any domain (medical, automotive, engineering, etc.). The tools `detect_potential_entities`
+and `identify_text_feedback_columns` will analyze column names and data samples using LLM
+to provide domain-agnostic suggestions. You don't need to rely on hardcoded patterns.
 
 ## CRITICAL: Check for Rollback FIRST!
 Before doing anything else, you MUST call 'get_schema_revision_reason' to check if this
@@ -93,14 +108,17 @@ You have TWO options:
 - Do NOT create nodes or relationships for text feedback columns
 - Use only structured data columns
 
-**Option B: Extract entities from text (advanced)**
+**Option B: Extract entities from text (advanced, LIMIT TO 2-3 COLUMNS)**
 Use the text extraction tools to analyze text feedback:
 1. `identify_text_feedback_columns(file_path)` - Find text columns
-2. `sample_text_column(file_path, column_name)` - Get text samples
-3. `analyze_text_column_entities(column_name, samples, category)` - Extract entity types with LLM
-4. `analyze_text_column_relationships(column_name, samples, entity_types, category)` - Extract relationships
-5. `add_text_entity_to_schema(entity_type, description, source_columns)` - Add to schema
-6. `add_text_relationship_to_schema(...)` - Add relationships to schema
+2. **SELECT ONLY 2-3 representative columns** (e.g., one positive, one negative)
+3. `sample_text_column(file_path, column_name)` - Get text samples
+4. `analyze_text_column_entities(column_name, samples, category)` - Extract entity types with LLM
+5. `analyze_text_column_relationships(column_name, samples, entity_types, category)` - Extract relationships
+6. `add_text_entity_to_schema(entity_type, description, source_columns)` - Add to schema
+
+**IMPORTANT**: Do NOT analyze every text column! Select 2-3 representative columns to extract
+entity patterns, then apply the same schema to similar columns during preprocessing.
 
 Use `source_type: "text_extraction"` for text-extracted nodes/relationships
 
@@ -228,20 +246,42 @@ If you detected a rollback in Step 0:
   - Use 'update_relationship_extraction_hints' to fix relationship column patterns
 - After fixing, proceed to Step 5 to present the revised schema
 
-### Step 2: Analyze Data Files
+### Step 2: Analyze Data Files & Standardize Column Names (CRITICAL!)
 For each approved file:
 1. Call 'sample_raw_file_structure' to see ALL columns and sample data
-2. Call 'detect_potential_entities' for automatic suggestions (optional - may not catch all)
-3. **IMPORTANT**: Categorize columns by what CAN be extracted:
-   - Entity columns (brand, model, store) → Entity nodes with `entity_selection`
-   - ID/sequence columns (序号) → Respondent nodes with `entity_selection`
-   - Score columns (*_score) → Aspect nodes (from headers) + RATES relationships
-   - **SKIP these columns** (not extractable):
-     - Text feedback columns (*_positive, *_negative)
-     - Insight columns (*_insight)
-     - Experience area columns (*_experience*)
-     - Media columns (*_media)
-   These text columns contain unstructured data that cannot be automatically extracted.
+2. ⚠️ **IMMEDIATELY after step 1** - Look at 'suggested_progress_total' in the response!
+   Call 'set_progress_total' with that value RIGHT NOW:
+   ```
+   set_progress_total(total=<suggested_progress_total from response>, description="Designing schema")
+   ```
+   ⚠️ DO NOT SKIP THIS OR PROCEED WITHOUT CALLING IT!
+3. Call 'detect_potential_entities' for automatic suggestions
+4. **IMMEDIATELY standardize column names** - Build rename_map and call 'standardize_column_names':
+   ```python
+   {
+       '序号': 'respondent_id',
+       '8、您本次调研的品牌是？': 'brand',
+       '该车型"外观设计"方面您会打多少分呢？': 'appearance_design_score',
+       '60、劣势点': 'space_negative_feedback',
+       '61、针对乘坐舒适中的"舒适配置"方面您觉得该车型优劣点的体验是？—优秀点': 'comfort_config_positive_feedback',
+       '61、劣势点': 'comfort_config_negative_feedback',
+       # ... map ALL columns to clean names
+   }
+   ```
+   ⚠️ This creates a standardized file (e.g., "序号_standardized.csv")
+
+5. **USE STANDARDIZED FILE for all subsequent operations!**
+   After standardization, categorize columns using the NEW standardized names:
+   - Entity columns (brand, model, store) → Entity nodes
+   - ID/sequence columns (respondent_id) → Respondent nodes
+   - Score columns (*_score) → Aspect nodes + RATES relationships
+   - Text feedback columns (*_positive_feedback, *_negative_feedback) → **ONLY 2-3 representative columns**
+
+6. For text analysis, use the STANDARDIZED file and column names:
+   - identify_text_feedback_columns(file_path="序号_standardized.csv")
+   - sample_text_column(file_path="序号_standardized.csv", column_name="comfort_config_positive_feedback")
+
+   ⚠️ NEVER construct or guess column names! Use EXACT names from the standardized file.
 
 ### Step 3: Propose Node Types
 Based on your analysis, propose node types that best capture the data:
@@ -259,34 +299,6 @@ For each relationship, call 'propose_relationship_type' with:
 - to_node: target node label
 - properties: list (e.g., ["score"] for RATES)
 - extraction_hints: extraction guidance
-
-### Step 4.5: Standardize Column Names (CRITICAL!)
-BEFORE presenting schema to user, call 'standardize_column_names' to rename complex
-column names to clean, standardized names. This prevents preprocessing failures!
-
-Build a rename_map that maps original column names to clean names:
-```python
-{
-    '序号': 'respondent_id',
-    '8、您本次调研的品牌是？': 'brand',
-    '9、您本次调研的车型及配置是？': 'model',
-    '10、您本次到访的门店是': 'store',
-    '该车型"外观设计"方面您会打多少分呢？': 'appearance_design_score',
-    '该车型"内饰设计"方面您会打多少分呢？': 'interior_design_score',
-    # ... more mappings
-}
-```
-
-Rules for standardized column names:
-1. Use lowercase with underscores (snake_case)
-2. Remove question marks, numbers, and special characters
-3. Use clear, descriptive names that match schema labels
-4. For rating columns: use format like "<aspect>_score" (e.g., "appearance_score", "interior_score")
-
-After calling standardize_column_names:
-- The tool creates a new file with "_standardized.csv" suffix
-- Update your extraction_hints to use the NEW standardized column names!
-- Example: column_pattern should be "brand" not "8、您本次调研的品牌是？"
 
 ### Step 5: Present Schema
 1. Call 'get_target_schema' to get the complete schema
@@ -374,6 +386,9 @@ CRITIC_INSTRUCTION = f"""
 
 # Tool lists
 SCHEMA_DESIGN_TOOLS = [
+    # Progress tracking
+    set_progress_total,
+    # Context tools
     get_approved_user_goal,
     get_approved_files,
     sample_file,

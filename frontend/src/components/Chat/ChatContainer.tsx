@@ -5,12 +5,22 @@ import { MessageList } from './MessageList';
 import { InputBar } from './InputBar';
 import { PhaseIndicator } from './PhaseIndicator';
 import { GraphVisualization } from '../Graph/GraphVisualization';
-import { Network, Plus } from 'lucide-react';
+import { TaskManager } from './TaskManager';
+import { Network, Plus, Clock, StopCircle } from 'lucide-react';
 
 export function ChatContainer() {
-  const { phase, isConnected, isLoading } = useChatStore();
-  const { connect, disconnect, sendMessage, connectionStatus, startNewChat } = useWebSocket();
+  const {
+    phase,
+    sessionId,
+    isConnected,
+    isLoading,
+  } = useChatStore();
+  const { connect, disconnect, sendMessage, connectionStatus, startNewChat, cancel } = useWebSocket();
   const [showGraph, setShowGraph] = useState(false);
+  const [showTaskManager, setShowTaskManager] = useState(false);
+
+  // Check if current task is running (can be cancelled)
+  const isRunning = isLoading || !['idle', 'complete', 'error', 'query'].includes(phase);
 
   useEffect(() => {
     // Connect on mount
@@ -36,24 +46,39 @@ export function ChatContainer() {
           <h1 className="text-xl font-semibold text-text-primary">Agentic KG</h1>
           <PhaseIndicator phase={phase} />
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-1">
+          {/* Cancel button - only show when task is running */}
+          {isRunning && (
+            <button
+              onClick={cancel}
+              className="p-2 rounded-full hover:bg-white/10 text-red-400 transition-colors"
+              title="Stop"
+            >
+              <StopCircle className="w-5 h-5" />
+            </button>
+          )}
           <button
             onClick={startNewChat}
-            className="flex items-center gap-2 px-3 py-1.5 bg-green-500/10 hover:bg-green-500/20 text-green-500 rounded-lg transition-colors"
-            title="Start New Chat"
+            className="p-2 rounded-full hover:bg-white/10 text-text-secondary hover:text-text-primary transition-colors"
+            title="New Chat"
           >
-            <Plus className="w-4 h-4" />
-            <span className="text-sm font-medium">New Chat</span>
+            <Plus className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setShowTaskManager(true)}
+            className="p-2 rounded-full hover:bg-white/10 text-text-secondary hover:text-text-primary transition-colors"
+            title="History"
+          >
+            <Clock className="w-5 h-5" />
           </button>
           <button
             onClick={() => setShowGraph(true)}
-            className="flex items-center gap-2 px-3 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded-lg transition-colors"
-            title="View Knowledge Graph"
+            className="p-2 rounded-full hover:bg-white/10 text-text-secondary hover:text-text-primary transition-colors"
+            title="View Graph"
           >
-            <Network className="w-4 h-4" />
-            <span className="text-sm font-medium">View Graph</span>
+            <Network className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2">
+          <div className="ml-2 flex items-center">
             <span
               className={`w-2 h-2 rounded-full ${
                 connectionStatus === 'connected'
@@ -62,8 +87,8 @@ export function ChatContainer() {
                   ? 'bg-yellow-500'
                   : 'bg-red-500'
               }`}
+              title={connectionStatus}
             />
-            <span className="text-sm text-text-secondary capitalize">{connectionStatus}</span>
           </div>
         </div>
       </header>
@@ -84,6 +109,23 @@ export function ChatContainer() {
 
       {/* Graph Visualization Modal */}
       <GraphVisualization isOpen={showGraph} onClose={() => setShowGraph(false)} />
+
+      {/* Task Manager Modal */}
+      <TaskManager
+        isOpen={showTaskManager}
+        onClose={() => setShowTaskManager(false)}
+        currentSessionId={sessionId}
+        onSwitchSession={(id) => {
+          console.log('Switch to session:', id);
+          setShowTaskManager(false);
+        }}
+        onDeleteSession={(id) => {
+          console.log('Deleted session:', id);
+        }}
+        onCancelSession={(id) => {
+          console.log('Cancelled session:', id);
+        }}
+      />
     </div>
   );
 }

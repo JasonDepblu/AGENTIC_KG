@@ -1,0 +1,173 @@
+{
+  "name": "Target Schema",
+  "description": "Knowledge graph schema designed from raw data",
+  "nodes": {
+    "CostControlStrategy": {
+      "label": "CostControlStrategy",
+      "unique_property": "costcontrolstrategy_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "92、该车型是否有成本控制方面的启发项?",
+        "description": "A cost-saving approach or design decision that reduces manufacturing or development costs while maintaining product value."
+      }
+    },
+    "Respondent": {
+      "label": "Respondent",
+      "unique_property": "respondent_id",
+      "properties": [],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "entity_selection",
+        "column_pattern": "序号"
+      }
+    },
+    "Feature": {
+      "label": "Feature",
+      "unique_property": "feature_id",
+      "properties": [],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "92、该车型是否有成本控制方面的启发项?"
+      }
+    },
+    "SceneInnovation": {
+      "label": "SceneInnovation",
+      "unique_property": "sceneinnovation_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "90、该车型/品牌是否有优秀的场景创新、亮点设计等启发项?",
+        "description": "An innovative usage scenario enabled by vehicle design features that allows for unique user experiences beyond traditional transportation."
+      }
+    },
+    "EmotionalNeed": {
+      "label": "EmotionalNeed",
+      "unique_property": "emotionalneed_id",
+      "properties": [
+        "name",
+        "category",
+        "source_column"
+      ],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "89、您针对该品牌“品牌用户群 ”方面的体验是?（选填）",
+        "description": "An emotional driver or psychological need that influences a user's preference for a vehicle, such as wanting to feel innovative, safe, or practical."
+      }
+    },
+    "UserSegment": {
+      "label": "UserSegment",
+      "unique_property": "usersegment_id",
+      "properties": [],
+      "entity_type": "Custom",
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "89、您针对该品牌“品牌用户群 ”方面的体验是?（选填）"
+      }
+    }
+  },
+  "relationships": {
+    "MENTIONED_COST_CONTROL": {
+      "relationship_type": "MENTIONED_COST_CONTROL",
+      "from_node": "Respondent",
+      "to_node": "CostControlStrategy",
+      "properties": [
+        "sentiment",
+        "source_aspect"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "92、该车型是否有成本控制方面的启发项?",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "ENABLES_COST_SAVINGS": {
+      "relationship_type": "ENABLES_COST_SAVINGS",
+      "from_node": "CostControlStrategy",
+      "to_node": "Feature",
+      "properties": [
+        "strategy_type",
+        "cost_impact"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "92、该车型是否有成本控制方面的启发项?",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "MENTIONED_SCENE_INNOVATION": {
+      "relationship_type": "MENTIONED_SCENE_INNOVATION",
+      "from_node": "Respondent",
+      "to_node": "SceneInnovation",
+      "properties": [
+        "sentiment",
+        "source_aspect"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "90、该车型/品牌是否有优秀的场景创新、亮点设计等启发项?",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "ENABLES_SCENE_INNOVATION": {
+      "relationship_type": "ENABLES_SCENE_INNOVATION",
+      "from_node": "Feature",
+      "to_node": "SceneInnovation",
+      "properties": [
+        "enabling_feature",
+        "innovation_type"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "90、该车型/品牌是否有优秀的场景创新、亮点设计等启发项?",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "EXPERIENCED_EMOTIONAL_NEED": {
+      "relationship_type": "EXPERIENCED_EMOTIONAL_NEED",
+      "from_node": "Respondent",
+      "to_node": "EmotionalNeed",
+      "properties": [
+        "sentiment",
+        "source_aspect"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "89、您针对该品牌“品牌用户群 ”方面的体验是?（选填）",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    },
+    "HAS_EMOTIONAL_NEED": {
+      "relationship_type": "HAS_EMOTIONAL_NEED",
+      "from_node": "UserSegment",
+      "to_node": "EmotionalNeed",
+      "properties": [
+        "need_type",
+        "priority"
+      ],
+      "extraction_hints": {
+        "source_type": "text_extraction",
+        "column_pattern": "89、您针对该品牌“品牌用户群 ”方面的体验是?（选填）",
+        "sentiment": "positive",
+        "respondent_column": "respondent_id"
+      }
+    }
+  }
+}

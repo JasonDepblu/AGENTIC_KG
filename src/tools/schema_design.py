@@ -6,10 +6,12 @@ These tools are used in the SCHEMA_DESIGN phase of the Schema-First pipeline.
 """
 
 import re
+import json
 import logging
+from datetime import datetime
 from itertools import islice
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 from google.adk.tools import ToolContext
@@ -37,10 +39,110 @@ from ..models.target_schema import (
     APPROVED_TARGET_SCHEMA_KEY,
     DETECTED_ENTITIES_KEY,
 )
+# Import LLM detection tools for domain-agnostic entity detection
+from .llm_detection import (
+    detect_entities_from_columns as llm_detect_entities,
+    detect_text_feedback_columns as llm_detect_text_feedback,
+)
+
+# Configuration flag for detection method
+# Set to True to use LLM-based detection (domain-agnostic)
+# Set to False to use pattern-based detection (faster but domain-specific)
+USE_LLM_DETECTION = True
 
 
-# Chinese patterns for entity detection
-# NOTE: Patterns are matched against column names with trailing punctuation removed
+def _robust_json_parse(text: str, default_key: str = "entity_types") -> Dict[str, Any]:
+    """
+    Robustly parse JSON from LLM response, handling common issues:
+    - Extract JSON from markdown code blocks
+    - Handle truncated JSON by attempting to repair
+    - Return a default structure on failure
+
+    Args:
+        text: Raw text from LLM response
+        default_key: Key expected in the result (used for fallback)
+
+    Returns:
+        Parsed JSON dict, or empty default structure on failure
+    """
+    if not text:
+        return {default_key: [], "analysis_notes": "Empty response"}
+
+    # Step 1: Extract JSON from markdown code blocks
+    result_text = text.strip()
+    if "```json" in result_text:
+        result_text = result_text.split("```json")[1].split("```")[0].strip()
+    elif "```" in result_text:
+        parts = result_text.split("```")
+        if len(parts) >= 2:
+            result_text = parts[1].strip()
+
+    # Step 2: Try direct parsing
+    try:
+        return json.loads(result_text)
+    except json.JSONDecodeError:
+        pass
+
+    # Step 3: Try to find and extract JSON object
+    # Look for { ... } pattern
+    start_idx = result_text.find('{')
+    if start_idx == -1:
+        logger.warning("No JSON object found in response")
+        return {default_key: [], "analysis_notes": "No valid JSON found"}
+
+    # Find matching closing brace
+    brace_count = 0
+    end_idx = start_idx
+    for i, char in enumerate(result_text[start_idx:], start_idx):
+        if char == '{':
+            brace_count += 1
+        elif char == '}':
+            brace_count -= 1
+            if brace_count == 0:
+                end_idx = i
+                break
+
+    if brace_count == 0:
+        # Found complete JSON object
+        try:
+            return json.loads(result_text[start_idx:end_idx + 1])
+        except json.JSONDecodeError:
+            pass
+
+    # Step 4: Try to repair truncated JSON
+    # Common issue: JSON is cut off at max_tokens
+    json_fragment = result_text[start_idx:]
+
+    # Count unclosed brackets and braces
+    open_braces = json_fragment.count('{') - json_fragment.count('}')
+    open_brackets = json_fragment.count('[') - json_fragment.count(']')
+
+    # Try to close them
+    repaired = json_fragment
+    if open_brackets > 0 or open_braces > 0:
+        # Remove any trailing incomplete string/value
+        # Look for last complete value
+        for end_pattern in [',', ':', '"', ']', '}']:
+            last_pos = repaired.rfind(end_pattern)
+            if last_pos > len(repaired) // 2:  # Only truncate from latter half
+                test_json = repaired[:last_pos + 1]
+                # Add closing brackets/braces
+                test_json += ']' * open_brackets + '}' * open_braces
+                try:
+                    result = json.loads(test_json)
+                    logger.info(f"Successfully repaired truncated JSON")
+                    return result
+                except json.JSONDecodeError:
+                    continue
+
+    logger.warning(f"Failed to parse or repair JSON response")
+    return {default_key: [], "analysis_notes": "JSON parsing failed"}
+
+
+# Chinese patterns for entity detection (DEPRECATED - use LLM detection instead)
+# NOTE: These patterns are kept for backward compatibility only.
+# When USE_LLM_DETECTION = True, LLM-based detection is used instead.
+# Patterns are matched against column names with trailing punctuation removed
 ENTITY_PATTERNS = {
     EntityType.BRAND: [
         r"品牌是?[\?？]?$",      # Ends with "品牌" optionally followed by "是" and "?"
@@ -105,6 +207,150 @@ def _get_or_create_schema(tool_context: ToolContext) -> TargetSchema:
 def _save_schema(tool_context: ToolContext, schema: TargetSchema) -> None:
     """Save schema to state."""
     tool_context.state[TARGET_SCHEMA_KEY] = schema.to_dict()
+
+
+def _resolve_pattern(
+    old_pattern: str,
+    rename_map: Dict[str, str],
+    new_columns: List[str]
+) -> Tuple[str, bool, Optional[str]]:
+    """
+    Resolve and update column_pattern after column standardization.
+
+    Handles three cases:
+    1. Exact match: old_pattern is an original column name -> replace with new name
+    2. Valid regex: old_pattern is a regex that still matches new columns -> keep as-is
+    3. Partial match: old_pattern contains an original column name -> replace that part
+
+    Args:
+        old_pattern: The original column_pattern from extraction_hints
+        rename_map: {original_column_name: new_column_name} mapping
+        new_columns: List of new standardized column names
+
+    Returns:
+        Tuple of (new_pattern, was_updated, warning_message)
+        - new_pattern: The resolved pattern (may be unchanged)
+        - was_updated: True if pattern was modified
+        - warning_message: Warning if pattern won't match any column (None otherwise)
+    """
+    # Case 1: Exact match - old_pattern is an original column name
+    if old_pattern in rename_map:
+        return rename_map[old_pattern], True, None
+
+    # Case 2: Check if it's a valid regex that matches new column names
+    try:
+        regex = re.compile(old_pattern)
+        matches = [col for col in new_columns if regex.search(col)]
+        if matches:
+            # Regex is still valid and matches new columns, keep it
+            logger.debug(f"Pattern '{old_pattern}' matches new columns: {matches[:3]}...")
+            return old_pattern, False, None
+    except re.error:
+        pass  # Not a valid regex, continue to other cases
+
+    # Case 3: Partial match - original column name is contained in pattern
+    for old_col, new_col in rename_map.items():
+        if old_col in old_pattern:
+            new_pattern = old_pattern.replace(old_col, new_col)
+            logger.debug(f"Partial match: replaced '{old_col}' with '{new_col}' in pattern")
+            return new_pattern, True, None
+
+    # Pattern doesn't match anything - generate warning
+    warning = f"Pattern '{old_pattern}' won't match any standardized column"
+    logger.warning(f"{warning}. Available columns: {new_columns[:5]}...")
+    return old_pattern, False, warning
+
+
+def _sync_schema_column_patterns(
+    tool_context: ToolContext,
+    rename_map: Dict[str, str],
+) -> Dict[str, Any]:
+    """
+    Sync Schema's extraction_hints to use standardized column names.
+
+    After standardize_column_names() renames columns (e.g., '序号' -> 'respondent_id'),
+    this function updates all extraction_hints.column_pattern values in the Schema
+    to use the new column names.
+
+    Handles three cases intelligently:
+    1. Exact match: pattern is an original column name -> replace with new name
+    2. Valid regex: pattern still matches new columns -> keep as-is
+    3. Partial match: pattern contains original column name -> replace that part
+
+    Args:
+        tool_context: ADK ToolContext for state management
+        rename_map: {original_column_name: new_column_name} mapping
+
+    Returns:
+        Dictionary with update details:
+        - updated_nodes: list of updated node info
+        - updated_relationships: list of updated relationship info
+        - warnings: list of warning messages for patterns that won't match
+    """
+    schema = _get_or_create_schema(tool_context)
+    if not schema:
+        return {"updated_nodes": [], "updated_relationships": [], "warnings": []}
+
+    new_column_names = list(rename_map.values())
+    updated_nodes = []
+    updated_relationships = []
+    warnings = []
+
+    # Update Node extraction_hints
+    for label, node in schema.nodes.items():
+        hints = node.extraction_hints
+        if "column_pattern" in hints:
+            old_pattern = hints["column_pattern"]
+            new_pattern, was_updated, warning = _resolve_pattern(
+                old_pattern, rename_map, new_column_names
+            )
+
+            if was_updated:
+                hints["column_pattern"] = new_pattern
+                updated_nodes.append({
+                    "label": label,
+                    "old_pattern": old_pattern,
+                    "new_pattern": new_pattern,
+                })
+                logger.debug(f"Updated Node '{label}' column_pattern: '{old_pattern}' -> '{new_pattern}'")
+
+            if warning:
+                warnings.append(f"Node '{label}': {warning}")
+
+    # Update Relationship extraction_hints
+    for rel_type, rel in schema.relationships.items():
+        hints = rel.extraction_hints
+        if "column_pattern" in hints:
+            old_pattern = hints["column_pattern"]
+            new_pattern, was_updated, warning = _resolve_pattern(
+                old_pattern, rename_map, new_column_names
+            )
+
+            if was_updated:
+                hints["column_pattern"] = new_pattern
+                updated_relationships.append({
+                    "type": rel_type,
+                    "old_pattern": old_pattern,
+                    "new_pattern": new_pattern,
+                })
+                logger.debug(f"Updated Relationship '{rel_type}' column_pattern: '{old_pattern}' -> '{new_pattern}'")
+
+            if warning:
+                warnings.append(f"Relationship '{rel_type}': {warning}")
+
+    # Save updated Schema to state
+    if updated_nodes or updated_relationships:
+        _save_schema(tool_context, schema)
+        logger.info(f"Schema extraction_hints synced: {len(updated_nodes)} nodes, {len(updated_relationships)} relationships")
+
+    if warnings:
+        logger.warning(f"Schema sync warnings: {warnings}")
+
+    return {
+        "updated_nodes": updated_nodes,
+        "updated_relationships": updated_relationships,
+        "warnings": warnings,
+    }
 
 
 def sample_raw_file_structure(
@@ -176,8 +422,19 @@ def sample_raw_file_structure(
             })
 
         # Auto-detect entity types based on normalized column names
+        # Uses LLM detection when USE_LLM_DETECTION=True for domain-agnostic detection
         normalized_column_names = [info["name"] for info in columns_info]
-        suggested_entities = _detect_entity_types(normalized_column_names)
+        suggested_entities = detect_entities_smart(
+            file_path=file_path,
+            column_names=normalized_column_names,
+            tool_context=tool_context,
+        )
+
+        # Calculate suggested progress total for the agent
+        entity_cols = len([c for c in columns_info if c["unique_count"] < 50 and c["unique_count"] > 1])
+        score_cols = len([c for c in columns_info if "score" in c["name"].lower() or "分" in c["name"]])
+        text_cols = len([c for c in columns_info if c["dtype"] == "object" and c["unique_count"] > 50])
+        suggested_total = entity_cols + score_cols + min(text_cols, 4) + 5  # Limit text cols to 2 pairs
 
         result = {
             "file_path": file_path,
@@ -185,6 +442,9 @@ def sample_raw_file_structure(
             "column_count": int(len(df.columns)),  # Convert to Python int
             "columns": columns_info,
             "suggested_entities": suggested_entities,
+            # Progress tracking hint
+            "NEXT_ACTION": f"IMMEDIATELY call set_progress_total(total={suggested_total}, description='Designing schema')",
+            "suggested_progress_total": suggested_total,
         }
 
         return tool_success("file_structure", result)
@@ -194,7 +454,12 @@ def sample_raw_file_structure(
 
 
 def _detect_entity_types(column_names: List[str]) -> List[Dict[str, Any]]:
-    """Detect potential entity types from column names."""
+    """
+    Detect potential entity types from column names using pattern matching.
+
+    DEPRECATED: This function uses hardcoded patterns and is domain-specific.
+    For domain-agnostic detection, use _detect_entity_types_with_llm() instead.
+    """
     detected = []
 
     for col in column_names:
@@ -218,9 +483,99 @@ def _detect_entity_types(column_names: List[str]) -> List[Dict[str, Any]]:
     return detected
 
 
-def detect_potential_entities(
+def _detect_entity_types_with_llm(
     file_path: str,
     tool_context: ToolContext
+) -> List[Dict[str, Any]]:
+    """
+    Detect potential entity types using LLM analysis.
+
+    This is the domain-agnostic alternative to _detect_entity_types().
+    It uses LLM to analyze column names and data samples to infer entity types.
+
+    Args:
+        file_path: Path to the CSV file (relative to import dir)
+        tool_context: ADK ToolContext for state management
+
+    Returns:
+        List of detected entity suggestions compatible with _detect_entity_types format
+    """
+    logger.info(f"Using LLM-based entity detection for: {file_path}")
+
+    try:
+        # Call LLM detection tool
+        result = llm_detect_entities(file_path, tool_context)
+
+        if result.get("status") == "error":
+            logger.warning(f"LLM detection failed: {result.get('error')}")
+            # Fallback to empty list
+            return []
+
+        # Convert LLM detection format to expected format
+        detected = []
+        details = result.get("details", [])
+
+        for entity_info in details:
+            # Map LLM column_type to entity_type format
+            column_type = entity_info.get("column_type", "")
+            suggested_entity = entity_info.get("suggested_entity_name", "")
+
+            # Only include actual entity columns, not metadata
+            if column_type in ["IDENTIFIER", "CATEGORICAL_ENTITY", "NUMERIC_RATING"]:
+                detected.append({
+                    "column": entity_info.get("column", ""),
+                    "entity_type": suggested_entity or column_type,
+                    "pattern_matched": "llm_detection",  # Mark as LLM detected
+                    "confidence": "high",  # LLM provides semantic understanding
+                    "column_type": column_type,
+                    "reason": entity_info.get("reason", ""),
+                    "is_key_entity": entity_info.get("is_key_entity", False),
+                })
+
+        logger.info(f"LLM detected {len(detected)} entities")
+        return detected
+
+    except Exception as e:
+        logger.error(f"Error in LLM entity detection: {e}")
+        return []
+
+
+def detect_entities_smart(
+    file_path: str,
+    column_names: List[str],
+    tool_context: ToolContext,
+    use_llm: Optional[bool] = None
+) -> List[Dict[str, Any]]:
+    """
+    Smart entity detection that can use either LLM or pattern-based detection.
+
+    Args:
+        file_path: Path to the data file
+        column_names: List of column names (for pattern-based fallback)
+        tool_context: ADK ToolContext
+        use_llm: Force LLM (True) or patterns (False). None uses global USE_LLM_DETECTION.
+
+    Returns:
+        List of detected entity suggestions
+    """
+    should_use_llm = use_llm if use_llm is not None else USE_LLM_DETECTION
+
+    if should_use_llm:
+        # Try LLM-based detection
+        result = _detect_entity_types_with_llm(file_path, tool_context)
+        if result:
+            return result
+        # Fallback to pattern-based if LLM fails
+        logger.info("LLM detection returned empty, falling back to pattern-based")
+
+    # Use pattern-based detection
+    return _detect_entity_types(column_names)
+
+
+def detect_potential_entities(
+    file_path: str,
+    tool_context: ToolContext,
+    use_llm: Optional[bool] = None
 ) -> Dict[str, Any]:
     """
     Auto-detect potential entity types in a raw data file.
@@ -228,15 +583,21 @@ def detect_potential_entities(
     Uses column name patterns and value analysis to suggest entity types
     that could be included in the target schema.
 
+    When USE_LLM_DETECTION=True (default), uses LLM for domain-agnostic detection.
+    Otherwise, falls back to hardcoded patterns (domain-specific).
+
     Args:
         file_path: File to analyze, relative to the import directory
         tool_context: ADK ToolContext for state management
+        use_llm: Override for LLM detection (None uses global USE_LLM_DETECTION)
 
     Returns:
         Dictionary with detected entities:
         - entities: List of detected entity suggestions
         - relationships: Suggested relationships based on column patterns
     """
+    should_use_llm = use_llm if use_llm is not None else USE_LLM_DETECTION
+
     # Validate file path
     validation_error = validate_file_path(file_path)
     if validation_error:
@@ -261,9 +622,77 @@ def detect_potential_entities(
         else:
             return tool_error(f"Unsupported file type: {suffix}")
 
-        # Detect entities
         entities = []
         relationships = []
+
+        # Try LLM-based detection first when enabled
+        if should_use_llm:
+            logger.info(f"Using LLM-based entity detection for: {file_path}")
+            llm_result = llm_detect_entities(file_path, tool_context)
+
+            if llm_result.get("status") != "error":
+                # Use LLM detection results
+                for entity_info in llm_result.get("details", []):
+                    column_type = entity_info.get("column_type", "")
+                    col = entity_info.get("column", "")
+
+                    # Map column to entity suggestion
+                    if column_type in ["IDENTIFIER", "CATEGORICAL_ENTITY"]:
+                        # Get sample values
+                        if col in df.columns:
+                            sample_values = df[col].dropna().head(5).tolist()
+                            sample_values = [str(v)[:50] for v in sample_values]
+                            is_unique = df[col].nunique() == len(df[col].dropna())
+                            unique_count = int(df[col].nunique())
+                        else:
+                            sample_values = []
+                            is_unique = False
+                            unique_count = 0
+
+                        entities.append({
+                            "column": col,
+                            "suggested_label": entity_info.get("suggested_entity_name", col),
+                            "entity_type": entity_info.get("suggested_entity_name", column_type),
+                            "is_unique_identifier": column_type == "IDENTIFIER" or is_unique,
+                            "unique_count": unique_count,
+                            "sample_values": sample_values,
+                            "extraction_hint": f"Extract from column: {col}",
+                            "detection_method": "llm",
+                            "reason": entity_info.get("reason", ""),
+                        })
+
+                # Use LLM-detected relationships
+                for rel_info in llm_result.get("suggested_relationships", []):
+                    relationships.append({
+                        "column": ", ".join(rel_info.get("source_columns", [])),
+                        "suggested_type": rel_info.get("type", "RELATES_TO"),
+                        "from_node": rel_info.get("from_node", ""),
+                        "to_node": rel_info.get("to_node", ""),
+                        "properties": [],
+                        "description": rel_info.get("description", ""),
+                        "detection_method": "llm",
+                    })
+
+                # Store in state with LLM detection metadata
+                detection_result = {
+                    "entities": entities,
+                    "relationships": relationships,
+                    "domain": llm_result.get("domain", "unknown"),
+                    "domain_description": llm_result.get("domain_description", ""),
+                    "detection_method": "llm",
+                }
+                tool_context.state[DETECTED_ENTITIES_KEY] = detection_result
+
+                return tool_success("detected_entities", {
+                    **detection_result,
+                    "summary": {
+                        "entity_count": len(entities),
+                        "relationship_count": len(relationships),
+                    }
+                })
+
+        # Fallback to pattern-based detection
+        logger.info(f"Using pattern-based entity detection for: {file_path}")
 
         for col in df.columns:
             col_lower = col.lower()
@@ -283,10 +712,11 @@ def detect_potential_entities(
                             "column": col,
                             "suggested_label": entity_type.value,
                             "entity_type": entity_type.value,
-                            "is_unique_identifier": bool(is_unique),  # Convert numpy.bool_ to Python bool
-                            "unique_count": int(df[col].nunique()),  # Convert numpy.int64 to Python int
+                            "is_unique_identifier": bool(is_unique),
+                            "unique_count": int(df[col].nunique()),
                             "sample_values": sample_values,
                             "extraction_hint": f"Extract from column: {col}",
+                            "detection_method": "pattern",
                         })
                         break
                 else:
@@ -306,12 +736,14 @@ def detect_potential_entities(
                     "to_node": "Aspect",
                     "properties": ["score"],
                     "aspect_name": aspect_name,
+                    "detection_method": "pattern",
                 })
 
         # Store in state
         tool_context.state[DETECTED_ENTITIES_KEY] = {
             "entities": entities,
             "relationships": relationships,
+            "detection_method": "pattern",
         }
 
         return tool_success("detected_entities", {
@@ -679,6 +1111,58 @@ def get_target_schema(tool_context: ToolContext) -> Dict[str, Any]:
     return tool_success(TARGET_SCHEMA_KEY, result)
 
 
+def _save_schema_to_file(tool_context: ToolContext, schema: TargetSchema) -> Dict[str, str]:
+    """
+    Save approved schema to files (JSON + Markdown).
+
+    Args:
+        tool_context: ADK ToolContext for state management
+        schema: The approved TargetSchema
+
+    Returns:
+        Dictionary with paths to saved files
+    """
+    from .task_manager import get_task_config
+
+    # Determine output directory
+    task_config = get_task_config(tool_context)
+    if task_config:
+        output_dir = Path(task_config["base_dir"]) / "schema"
+    else:
+        import_dir = get_neo4j_import_dir()
+        output_dir = Path(import_dir) / "schema" if import_dir else Path("data/schema")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Generate filename with timestamp
+    timestamp = datetime.now().strftime("%H%M")
+    base_name = f"schema{timestamp}"
+
+    saved_files = {}
+
+    # Save JSON format (machine-readable)
+    json_path = output_dir / f"{base_name}.json"
+    try:
+        with open(json_path, 'w', encoding='utf-8') as f:
+            f.write(schema.to_json())
+        saved_files["json"] = str(json_path)
+        logger.info(f"Saved schema JSON to: {json_path}")
+    except Exception as e:
+        logger.warning(f"Failed to save schema JSON: {e}")
+
+    # Save Markdown format (human-readable)
+    md_path = output_dir / f"{base_name}.md"
+    try:
+        with open(md_path, 'w', encoding='utf-8') as f:
+            f.write(schema.to_markdown())
+        saved_files["markdown"] = str(md_path)
+        logger.info(f"Saved schema Markdown to: {md_path}")
+    except Exception as e:
+        logger.warning(f"Failed to save schema Markdown: {e}")
+
+    return saved_files
+
+
 def approve_target_schema(tool_context: ToolContext) -> Dict[str, Any]:
     """
     Approve the current target schema for preprocessing.
@@ -719,10 +1203,14 @@ def approve_target_schema(tool_context: ToolContext) -> Dict[str, Any]:
     # This is the proper place to clear it (not in get_schema_revision_reason)
     tool_context.state[SCHEMA_REVISION_REASON_KEY] = None
 
+    # Save schema to files (JSON + Markdown)
+    saved_files = _save_schema_to_file(tool_context, schema)
+
     result = {
         "schema": schema.to_dict(),
         "summary": schema.get_summary(),
         "warnings": [],
+        "saved_files": saved_files,
     }
 
     if isolated:
@@ -1126,13 +1614,36 @@ def standardize_column_names(
         logger.info(f"Standardized file saved: {output_filename}")
         logger.info(f"Columns renamed: {len(actual_renames)}")
 
+        # Auto-sync Schema extraction_hints to use new column names
+        sync_result = _sync_schema_column_patterns(tool_context, actual_renames)
+        if sync_result["updated_nodes"] or sync_result["updated_relationships"]:
+            logger.info("Auto-synced Schema extraction_hints:")
+            for node_update in sync_result["updated_nodes"]:
+                logger.info(f"  Node '{node_update['label']}': '{node_update['old_pattern']}' -> '{node_update['new_pattern']}'")
+            for rel_update in sync_result["updated_relationships"]:
+                logger.info(f"  Rel '{rel_update['type']}': '{rel_update['old_pattern']}' -> '{rel_update['new_pattern']}'")
+
         # Build informative message
         auto_detected_count = len(auto_detected) if auto_detected else 0
         message = f"Successfully standardized {len(actual_renames)} column names. "
         if auto_detected_count > 0:
             message += f"({auto_detected_count} auto-detected based on schema). "
         message += f"The standardized file '{output_filename}' will be used for preprocessing. "
-        message += "Update your extraction_hints to use the new column names."
+
+        # Update message based on sync result
+        sync_count = len(sync_result["updated_nodes"]) + len(sync_result["updated_relationships"])
+        if sync_count > 0:
+            message += f"Schema extraction_hints have been auto-updated ({sync_count} patterns synced)."
+        else:
+            message += "Schema extraction_hints are already up-to-date."
+
+        # Add warnings about patterns that may not match
+        sync_warnings = sync_result.get("warnings", [])
+        if sync_warnings:
+            message += f" WARNING: {len(sync_warnings)} pattern(s) may not match any column: "
+            message += "; ".join(sync_warnings[:3])
+            if len(sync_warnings) > 3:
+                message += f"... and {len(sync_warnings) - 3} more"
 
         return tool_success("column_standardization", {
             "original_file": file_path,
@@ -1143,6 +1654,8 @@ def standardize_column_names(
             "rename_details": rename_details,
             "unmatched_columns": unmatched_columns,
             "new_columns": list(df.columns),
+            "schema_sync": sync_result,
+            "schema_sync_warnings": sync_warnings,
             "message": message,
         })
 
@@ -1208,7 +1721,9 @@ def get_schema_revision_reason(tool_context: ToolContext) -> Dict[str, Any]:
 # TEXT FEEDBACK COLUMN TOOLS
 # =============================================================================
 
-# Patterns for identifying text feedback columns
+# Patterns for identifying text feedback columns (DEPRECATED - use LLM detection)
+# NOTE: These patterns are kept for backward compatibility only.
+# When USE_LLM_DETECTION = True, LLM-based detection is used instead.
 TEXT_FEEDBACK_PATTERNS = [
     r"_positive",       # *_positive columns
     r"_negative",       # *_negative columns
@@ -1236,29 +1751,35 @@ def _get_text_llm_client():
     config = get_config()
     return OpenAI(
         api_key=config.llm.api_key,
-        base_url=config.llm.api_base
+        base_url=config.llm.api_base,
+        timeout=60.0  # 60 second timeout to prevent hanging
     )
 
 
 def identify_text_feedback_columns(
     file_path: str,
-    tool_context: ToolContext
+    tool_context: ToolContext,
+    use_llm: Optional[bool] = None
 ) -> Dict[str, Any]:
     """
     Identify text feedback columns in a data file.
 
-    Scans column names for patterns that indicate text feedback content
+    When USE_LLM_DETECTION=True (default), uses LLM for domain-agnostic detection.
+    Otherwise, scans column names for patterns that indicate text feedback content
     (e.g., *_positive, *_negative, *_insight, 优秀点, 劣势点).
 
     Args:
         file_path: File to analyze, relative to the import directory
         tool_context: ADK ToolContext for state management
+        use_llm: Override for LLM detection (None uses global USE_LLM_DETECTION)
 
     Returns:
         Dictionary with identified text feedback columns:
         - text_columns: List of column info with name, category, sample_values
         - count: Number of text feedback columns found
     """
+    should_use_llm = use_llm if use_llm is not None else USE_LLM_DETECTION
+
     validation_error = validate_file_path(file_path)
     if validation_error:
         return validation_error
@@ -1283,6 +1804,69 @@ def identify_text_feedback_columns(
             return tool_error(f"Unsupported file type: {suffix}")
 
         text_columns = []
+
+        # Try LLM-based detection first when enabled
+        if should_use_llm:
+            logger.info(f"Using LLM-based text feedback detection for: {file_path}")
+            llm_result = llm_detect_text_feedback(file_path, tool_context)
+
+            if llm_result.get("status") != "error" and llm_result.get("text_columns"):
+                # Use LLM detection results
+                for col_info in llm_result.get("text_columns", []):
+                    col = col_info.get("column", "")
+
+                    # Get sample values and stats if column exists in dataframe
+                    if col in df.columns:
+                        sample_values = df[col].dropna().head(5).tolist()
+                        sample_values = [
+                            str(v)[:200] for v in sample_values
+                            if str(v).strip() and str(v).lower() not in ['nan', 'none', '无', '-', '暂无']
+                        ]
+                        non_empty_count = df[col].dropna().apply(
+                            lambda x: str(x).strip() and str(x).lower() not in ['nan', 'none', '无', '-', '暂无']
+                        ).sum()
+                    else:
+                        sample_values = []
+                        non_empty_count = 0
+
+                    # Map LLM feedback_type to category
+                    feedback_type = col_info.get("feedback_type", "mixed")
+                    if feedback_type == "positive":
+                        category = "positive_feedback"
+                    elif feedback_type == "negative":
+                        category = "negative_feedback"
+                    elif feedback_type == "neutral":
+                        category = "insight"
+                    else:
+                        category = "text_feedback"
+
+                    text_columns.append({
+                        "column_name": col,
+                        "category": category,
+                        "sample_values": sample_values[:3],
+                        "non_empty_count": int(non_empty_count),
+                        "total_count": int(len(df)),
+                        "fill_rate": round(non_empty_count / len(df) * 100, 1) if len(df) > 0 else 0,
+                        "detection_method": "llm",
+                        "content_category": col_info.get("content_category", ""),
+                        "suggested_entities": col_info.get("suggested_entities", []),
+                        "reason": col_info.get("reason", ""),
+                        "priority": col_info.get("priority", 5),
+                    })
+
+                # Store in state
+                tool_context.state[TEXT_FEEDBACK_COLUMNS_KEY] = text_columns
+
+                return tool_success("text_feedback_columns", {
+                    "file_path": file_path,
+                    "text_columns": text_columns,
+                    "count": len(text_columns),
+                    "detection_method": "llm",
+                    "message": f"Found {len(text_columns)} text feedback columns (LLM detection)",
+                })
+
+        # Fallback to pattern-based detection
+        logger.info(f"Using pattern-based text feedback detection for: {file_path}")
 
         for col in df.columns:
             col_str = str(col).lower()
@@ -1321,6 +1905,7 @@ def identify_text_feedback_columns(
                         "non_empty_count": int(non_empty_count),
                         "total_count": int(len(df)),
                         "fill_rate": round(non_empty_count / len(df) * 100, 1) if len(df) > 0 else 0,
+                        "detection_method": "pattern",
                     })
                     break
 
@@ -1331,6 +1916,7 @@ def identify_text_feedback_columns(
             "file_path": file_path,
             "text_columns": text_columns,
             "count": len(text_columns),
+            "detection_method": "pattern",
             "message": f"Found {len(text_columns)} text feedback columns",
         })
 
@@ -1385,14 +1971,31 @@ def sample_text_column(
         else:
             return tool_error(f"Unsupported file type: {suffix}")
 
-        if column_name not in df.columns:
-            return tool_error(f"Column not found: {column_name}")
+        # Normalize column names by stripping whitespace
+        df.columns = [col.strip() if isinstance(col, str) else col for col in df.columns]
+        column_name_stripped = column_name.strip() if isinstance(column_name, str) else column_name
+
+        # Try exact match first, then fuzzy match
+        actual_column = None
+        if column_name_stripped in df.columns:
+            actual_column = column_name_stripped
+        else:
+            # Try to find a column that contains the search term
+            for col in df.columns:
+                if column_name_stripped in str(col) or str(col) in column_name_stripped:
+                    actual_column = col
+                    break
+
+        if actual_column is None:
+            return tool_error(f"Column not found: {column_name}. Available columns: {list(df.columns)[:10]}...")
+
+        column_name = actual_column
 
         # Filter out empty/placeholder values
-        placeholder_values = ['nan', 'none', '无', '-', '暂无', '未知', '不清楚', '']
-        valid_texts = df[column_name].dropna().apply(str).loc[
-            lambda x: ~x.str.lower().isin(placeholder_values) & (x.str.strip() != '')
-        ]
+        placeholder_values = {'nan', 'none', '无', '-', '暂无', '未知', '不清楚', ''}
+        str_series = df[column_name].dropna().astype(str)
+        valid_mask = ~str_series.str.lower().isin(placeholder_values) & (str_series.str.strip() != '')
+        valid_texts = str_series[valid_mask]
 
         # Sample diverse texts (try to get variety)
         if len(valid_texts) > sample_size:
@@ -1486,7 +2089,6 @@ def analyze_text_column_entities(
     "analysis_notes": "简要说明识别逻辑"
 }}"""
 
-    import json
     try:
         response = client.chat.completions.create(
             model=TEXT_ANALYSIS_MODEL,
@@ -1495,18 +2097,13 @@ def analyze_text_column_entities(
                 {"role": "user", "content": user_prompt}
             ],
             temperature=0.1,
-            max_tokens=1000
+            max_tokens=2000  # Increased from 1000 to handle complex responses
         )
 
         result_text = (response.choices[0].message.content or "").strip()
 
-        # Extract JSON from response
-        if "```json" in result_text:
-            result_text = result_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in result_text:
-            result_text = result_text.split("```")[1].split("```")[0].strip()
-
-        result = json.loads(result_text)
+        # Use robust JSON parser to handle truncated or malformed responses
+        result = _robust_json_parse(result_text, default_key="entity_types")
         entity_types = result.get("entity_types", [])
 
         # Build recommended node definitions
@@ -1625,7 +2222,6 @@ def analyze_text_column_relationships(
 
 注意：from_node 通常是 "Respondent"，表示受访者提到了某个实体。"""
 
-    import json
     try:
         response = client.chat.completions.create(
             model=TEXT_ANALYSIS_MODEL,
@@ -1634,18 +2230,13 @@ def analyze_text_column_relationships(
                 {"role": "user", "content": user_prompt}
             ],
             temperature=0.1,
-            max_tokens=1000
+            max_tokens=2000  # Increased from 1000 to handle complex responses
         )
 
         result_text = (response.choices[0].message.content or "").strip()
 
-        # Extract JSON from response
-        if "```json" in result_text:
-            result_text = result_text.split("```json")[1].split("```")[0].strip()
-        elif "```" in result_text:
-            result_text = result_text.split("```")[1].split("```")[0].strip()
-
-        result = json.loads(result_text)
+        # Use robust JSON parser to handle truncated or malformed responses
+        result = _robust_json_parse(result_text, default_key="relationship_types")
         relationship_types = result.get("relationship_types", [])
 
         # Build recommended relationship definitions

@@ -4,9 +4,12 @@ Common tool utilities for Agentic KG.
 Provides helper functions used across all tools.
 """
 
+import logging
 from typing import Any, Dict, Optional
 
 from google.adk.tools import ToolContext
+
+logger = logging.getLogger(__name__)
 
 
 def tool_success(key: str, result: Any) -> Dict[str, Any]:
@@ -120,3 +123,47 @@ def validate_file_path(file_path: str) -> Dict[str, Any]:
             "Make sure the file is from the list of available files."
         )
     return None
+
+
+# Progress tracking keys
+PROGRESS_TOTAL_KEY = "progress_total"
+PROGRESS_DESCRIPTION_KEY = "progress_description"
+
+
+def set_progress_total(
+    total: int,
+    description: str,
+    tool_context: ToolContext,
+) -> Dict[str, Any]:
+    """
+    Set the total number of steps for progress tracking.
+
+    Call this at the start of a phase to set how many operations will be performed.
+    This enables accurate progress bar display in the UI.
+
+    Args:
+        total: Total number of operations planned (must be > 0)
+        description: Brief description of what's being processed (e.g., "Analyzing 5 columns")
+        tool_context: ADK ToolContext for state management
+
+    Returns:
+        Confirmation of progress total set
+
+    Example:
+        # At the start of schema design with 3 files, each with ~10 columns
+        set_progress_total(30, "Analyzing data structure and entities")
+    """
+    if total <= 0:
+        return tool_error("Progress total must be greater than 0")
+
+    tool_context.state[PROGRESS_TOTAL_KEY] = total
+    tool_context.state[PROGRESS_DESCRIPTION_KEY] = description
+
+    logger.info(f"[set_progress_total] Agent called with total={total}, description='{description}'")
+    logger.info(f"[set_progress_total] State after setting: progress_total={tool_context.state.get(PROGRESS_TOTAL_KEY)}")
+
+    return tool_success("progress_settings", {
+        "total": total,
+        "description": description,
+        "message": f"Progress tracking set: {total} steps for '{description}'"
+    })

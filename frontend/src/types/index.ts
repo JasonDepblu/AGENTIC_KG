@@ -94,4 +94,9 @@ export interface WebSocketMessage {
   state?: Record<string, unknown>;
   error?: string;
   is_final?: boolean;
+  // Progress tracking fields for extraction phase
+  progress?: number;  // Progress percentage (0-100)
+  progress_current?: number;  // Current item number
+  progress_total?: number;  // Total items to process
+  progress_item?: string;  // Current item being processed
 }

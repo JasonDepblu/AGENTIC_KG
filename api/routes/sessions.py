@@ -97,3 +97,60 @@ async def cancel_session(session_id: str):
         success=True,
         data={"cancelled": session_id},
     )
+
+
+# ============================================================
+# Task Management API
+# ============================================================
+
+@router.get("/tasks/list", response_model=APIResponse)
+async def list_all_tasks():
+    """
+    List all tasks with their status.
+
+    Returns task summaries sorted by creation time (newest first).
+    """
+    from src.tools.task_manager import list_tasks
+
+    result = list_tasks()
+    if result.get("status") == "error":
+        raise HTTPException(status_code=500, detail=result.get("error_message"))
+
+    return APIResponse(
+        success=True,
+        data=result.get("result", []),
+    )
+
+
+@router.get("/tasks/{task_id}", response_model=APIResponse)
+async def get_task_details(task_id: str):
+    """
+    Get full checkpoint data for a specific task.
+    """
+    from src.tools.task_manager import get_task_checkpoint
+
+    result = get_task_checkpoint(task_id)
+    if result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result.get("error_message"))
+
+    return APIResponse(
+        success=True,
+        data=result.get("result"),
+    )
+
+
+@router.delete("/tasks/{task_id}", response_model=APIResponse)
+async def delete_task(task_id: str):
+    """
+    Delete a task and all its data.
+    """
+    from src.tools.task_manager import delete_task as do_delete_task
+
+    result = do_delete_task(task_id)
+    if result.get("status") == "error":
+        raise HTTPException(status_code=404, detail=result.get("error_message"))
+
+    return APIResponse(
+        success=True,
+        data={"deleted": task_id},
+    )

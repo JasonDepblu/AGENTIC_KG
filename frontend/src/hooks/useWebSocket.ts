@@ -22,6 +22,8 @@ export function useWebSocket() {
     updateMessage,
     setLoading,
     clearMessages,
+    setExtractionProgress,
+    resetExtractionProgress,
   } = useChatStore();
 
   const messageIdRef = useRef(0);
@@ -208,11 +210,21 @@ export function useWebSocket() {
           currentMessageIdRef.current = null;
           toolProgressIdRef.current = null;  // Clear tool progress on phase completion
           authorMessageIdsRef.current.clear();  // Clear author message tracking
+          resetExtractionProgress();  // Clear extraction progress on phase completion
           break;
 
         case 'state_update':
           if (message.state) {
             setSessionState(message.state as Record<string, unknown>);
+          }
+          // Handle extraction progress updates
+          if (message.progress !== undefined && message.progress_total !== undefined) {
+            setExtractionProgress(
+              message.progress,
+              message.progress_current || 0,
+              message.progress_total,
+              message.progress_item || ''
+            );
           }
           break;
 
@@ -229,12 +241,13 @@ export function useWebSocket() {
           currentMessageIdRef.current = null;
           toolProgressIdRef.current = null;  // Clear tool progress on error
           authorMessageIdsRef.current.clear();  // Clear author message tracking on error
+          resetExtractionProgress();  // Clear extraction progress on error
           break;
       }
     } catch (error) {
       console.error('Failed to parse WebSocket message:', error);
     }
-  }, [addMessage, updateMessage, setPhase, setSessionId, setSessionState, setLoading]);
+  }, [addMessage, updateMessage, setPhase, setSessionId, setSessionState, setLoading, setExtractionProgress, resetExtractionProgress]);
 
   const connect = useCallback(() => {
     // If already connected, just update status
@@ -359,8 +372,21 @@ export function useWebSocket() {
       return;
     }
 
+    // Send cancel message to backend
     globalWs.send(JSON.stringify({ type: 'cancel' }));
-  }, []);
+
+    // Immediately update UI state
+    setLoading(false);
+    resetExtractionProgress();
+
+    // Add a system message to indicate cancellation
+    addMessage({
+      id: `cancel-${Date.now()}`,
+      role: 'system',
+      content: 'Task cancelled by user',
+      timestamp: new Date(),
+    });
+  }, [setLoading, addMessage, resetExtractionProgress]);
 
   const startNewChat = useCallback(() => {
     console.log('Starting new chat session');
